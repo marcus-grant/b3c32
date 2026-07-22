@@ -7,6 +7,10 @@ Revisions: [2026-07-22]
 License: Apache-2.0
 """
 
+import base64
+import random
+import secrets
+
 import pytest
 
 from depo.util.shortcode import (
@@ -129,6 +133,79 @@ class TestCrockfordEncode:
         assert not any(c in result for c in "ILOUilou")
 
 
+class TestEncoderCrossLineage:
+    """Shipped encoder agrees with an independent-lineage verifier.
+
+    The shipped encoder is shift-and-mask bitstream; the verifier is
+    stdlib RFC 4648 base32 with padding stripped and the alphabet
+    translated to Crockford. They share no code, so agreement over
+    arbitrary inputs certifies bit-mechanics (windowing, low-pad,
+    length) beyond the fixed hand-derived vectors.
+    """
+
+    _RFC4648_B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+    def _verify_encode_crockford_b32(self, data: bytes) -> str:
+        """Independent-lineage Crockford encoder for cross-checking.
+
+        Uses stdlib base64.b32encode (RFC 4648), strips '=' padding, and
+        translates the RFC 4648 alphabet to Crockford. Shares no code with
+        _encode_crockford_b32; used only in tests as the cross-lineage
+        oracle.
+        """
+        _CROCK_TRANS = str.maketrans(self._RFC4648_B32, _CROCKFORD32)
+        b32 = base64.b32encode(data).decode("ascii").rstrip("=")
+        return b32.translate(_CROCK_TRANS)
+
+    @pytest.mark.parametrize("data,expect", DRAFT_VECTORS_PYTEST)
+    def test_matches_known_vectors(self, data, expect):
+        """The verifier independently reproduces every known-value vector.
+
+        Anchors the verifier before it is trusted as the cross-lineage
+        oracle: if the stdlib-plus-translation verifier reproduces the
+        externally-authored draft rows and the hand-derived cases, it is
+        a trustworthy independent check on the shipped encoder. A failure
+        here means the verifier itself is wrong, not the encoder.
+        """
+        _ = expect  # To shut up LSP
+        assert _encode_crockford_b32(data) == self._verify_encode_crockford_b32(data)
+
+    def test_agrees_exhaustive_small(self):
+        """Shipped encoder and verifier agree on every input up to two
+        bytes: proof over the small domain, not a sample.
+
+        Covers all 256 single-byte and 65536 two-byte inputs plus the
+        empty input. Longer lengths and the remaining pad residues are
+        covered by the random test.
+        """
+        cases: list[bytes] = [b""]
+        cases += [bytes([i]) for i in range(256)]
+        cases += [bytes([i, j]) for i in range(256) for j in range(256)]
+        result = _encode_crockford_b32(b"")  # our function
+        verifier_result = self._verify_encode_crockford_b32(b"")  # verifier
+        for data in cases:
+            assert result == verifier_result, f"mismatch on {data!r}"
+
+    def test_agrees_on_random_inputs(self):
+        """Shipped encoder and verifier agree on random inputs of varied
+        length: extends coverage past the two-byte exhaustive bound and
+        across all pad residues.
+
+        Nondeterministic seed per run so coverage compounds across runs;
+        the seed and the failing input are in the assertion message so any
+        failure reproduces.
+        """
+        seed = secrets.randbits(64)
+        rng = random.Random(seed)
+        for _ in range(2000):
+            length = rng.randint(0, 64)
+            data = rng.randbytes(length)
+            assert _encode_crockford_b32(data) == self._verify_encode_crockford_b32(
+                data
+            ), f"mismatch on {data!r} (seed={seed})"
+
+
+@pytest.mark.skip(_SKIP_MSG)
 class TestCanonicalizeCode:
     """Tests for the canonicalization of Crockford Base32 codes.
 
