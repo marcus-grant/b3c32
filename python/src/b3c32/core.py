@@ -4,22 +4,27 @@ _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 def _encode_crockford_b32(data: bytes) -> str:
-    """Encode bytes as Crockford Base32.
+    """Encode bytes as Crockford Base32, low-pad bitstream.
+
+    Bits are taken MSB-first as a single stream, grouped into 5-bit
+    units from the left; a final partial group is zero-extended in the
+    least-significant positions (low-pad) per the Base32-for-Humans
+    draft, Section 3.1.
 
     Args:
         data: The bytes to encode.
 
     Returns:
-        Crockford Base32 encoded string. Length will be ceil(len(data) * 8 / 5).
+        Crockford Base32 string, length ceil(len(data) * 8 / 5).
     """
-    num = int.from_bytes(data, byteorder="big")
-    bit_length = len(data) * 8
-    char_count = (bit_length + 4) // 5
-    result = []
-    for i in range(char_count - 1, -1, -1):
-        index = (num >> (i * 5)) & 0x1F
-        result.append(_CROCKFORD32[index])
-    return "".join(result)
+    num, bit_count = int.from_bytes(data, byteorder="big"), len(data) * 8
+    symbol_count = (bit_count + 4) // 5  # ceil(bits / 5)
+    num <<= (5 - bit_count % 5) % 5  # low-pad to next 5-bit boundary
+    result = ""
+    for i in range(symbol_count):
+        symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
+        result += _CROCKFORD32[symbol_num]
+    return result
 
 
 def hash_full_b32(data: bytes) -> str:
