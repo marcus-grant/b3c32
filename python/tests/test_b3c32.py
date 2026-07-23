@@ -34,22 +34,28 @@ from depo.util.shortcode import (
 # scripts/audit-conformance-vectors.sh rederives the published set using only
 # external tools, with nothing from this implementation in the loop.
 
-REFERENCE_ENCODED_VECTORS = [
-    (0, "NW9MKEFNZ6GTD8209QN3DQ69"),
-    (1023, "2088JW7EV8ZBJCNTNGA2HHX2"),
-    (1024, "88GMEEFGJPJ0DWZWGFFBH2BM"),
-    (1025, "T017HBJ7XCKV6KXESXKV9ZH6"),
-    (2049, "BX6Q5X0DF9FR5CAWMASE8JRX"),
+KNOWN_ENCODE_VECTORS = [
+    (b"", "", "empty"),
+    (b"\x00", "00", "single_zero"),  # Start hand-derived boundrary-crossing vectors
+    (b"\x1f", "3W", "single_31"),
+    (b"\xff", "ZW", "single_255"),
+    (b"\x00\x01", "000G", "trailing_one"),
+    (b"\x84\x21", "GGGG", "walking_ones"),
+    (b"\x00" * 5, "00000000", "5x_zero"),
+    (b"\xff" * 5, "ZZZZZZZZ", "5x_ff"),
+    (b"\xaa\xaa\xaa", "NANAM", "3x_aa"),
+    (b"f", "CR", "IETF-draft-f"),  # Start of draft IETF examples, Section 3.1
+    (b"fo", "CSQG", "IETF-draft-fo"),
+    (b"foo", "CSQPY", "IETF-draft-foo"),
+    (b"foob", "CSQPYRG", "IETF-draft-foob"),
+    (b"fooba", "CSQPYRK1", "IETF-draft-fooba"),
+    (b"foobar", "CSQPYRK1E8", "IETF-draft-foobar"),
+    (b"test", "EHJQ6X0", "IETF-draft-test"),
 ]
 
-CONVENIENCE_ENCODED_VECTORS = [
-    (b"Hello, World!\n", "C8SR6JYEF0BXP7J03F7EMAWB", "hello"),
-    (b"\x00\xff\r\n\x1a", "56V71DGBAMEA57K94KP1NKF8", "hard_bytes"),
-    (b"\xe2\x9c\x85", "2A9V46HDZYE86ESAZ71PZ8Y6", "check_emoji"),
-]
-CONVENIENCE_ENCODED_PYTEST = [
-    pytest.param(x[0], x[1], id=x[2]) for x in CONVENIENCE_ENCODED_VECTORS
-]
+KNOWN_ENCODE_PYTEST = [pytest.param(x[0], x[1], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
+# Invert the KNOWN_ENCODE_VECTORS for decode tests: (encoded, original, id)
+KNOWN_DECODE_PYTEST = [pytest.param(x[1], x[0], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
 
 # Contract 4.6. 0xAA repeated, lengths 10-14 covering all five pad residues.
 PERIODIC_AA_VECTORS = [
@@ -76,6 +82,23 @@ PERIODIC_ZERO_VECTORS = [
     (12, "0" * 20),
     (13, "0" * 21),
     (14, "0" * 23),
+]
+
+REFERENCE_ENCODED_VECTORS = [
+    (0, "NW9MKEFNZ6GTD8209QN3DQ69"),
+    (1023, "2088JW7EV8ZBJCNTNGA2HHX2"),
+    (1024, "88GMEEFGJPJ0DWZWGFFBH2BM"),
+    (1025, "T017HBJ7XCKV6KXESXKV9ZH6"),
+    (2049, "BX6Q5X0DF9FR5CAWMASE8JRX"),
+]
+
+CONVENIENCE_ENCODED_VECTORS = [
+    (b"Hello, World!\n", "C8SR6JYEF0BXP7J03F7EMAWB", "hello"),
+    (b"\x00\xff\r\n\x1a", "56V71DGBAMEA57K94KP1NKF8", "hard_bytes"),
+    (b"\xe2\x9c\x85", "2A9V46HDZYE86ESAZ71PZ8Y6", "check_emoji"),
+]
+CONVENIENCE_ENCODED_PYTEST = [
+    pytest.param(x[0], x[1], id=x[2]) for x in CONVENIENCE_ENCODED_VECTORS
 ]
 
 
@@ -247,28 +270,6 @@ class TestCrockfordAlphabet:
             previous_symbol = current_symbol
 
 
-KNOWN_ENCODE_VECTORS = [
-    (b"", "", "empty"),
-    (b"\x00", "00", "single_zero"),  # Start hand-derived boundrary-crossing vectors
-    (b"\x1f", "3W", "single_31"),
-    (b"\xff", "ZW", "single_255"),
-    (b"\x00\x01", "000G", "trailing_one"),
-    (b"\x84\x21", "GGGG", "walking_ones"),
-    (b"\x00" * 5, "00000000", "5x_zero"),
-    (b"\xff" * 5, "ZZZZZZZZ", "5x_ff"),
-    (b"\xaa\xaa\xaa", "NANAM", "3x_aa"),
-    (b"f", "CR", "IETF-draft-f"),  # Start of draft IETF examples, Section 3.1
-    (b"fo", "CSQG", "IETF-draft-fo"),
-    (b"foo", "CSQPY", "IETF-draft-foo"),
-    (b"foob", "CSQPYRG", "IETF-draft-foob"),
-    (b"fooba", "CSQPYRK1", "IETF-draft-fooba"),
-    (b"foobar", "CSQPYRK1E8", "IETF-draft-foobar"),
-    (b"test", "EHJQ6X0", "IETF-draft-test"),
-]
-
-KNOWN_ENCODE_PYTEST = [pytest.param(x[0], x[1], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
-
-
 class TestCrockfordEncode:
     """Tests for the _encode_crockford_b32 helper function.
 
@@ -364,10 +365,6 @@ class TestEncoderCrossLineage:
         for data in inputs:
             msg = f"mismatch on {data!r} (seed={seed})"
             assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
-
-
-# Invert the KNOWN_ENCODE_VECTORS for decode tests: (encoded, original, id)
-KNOWN_DECODE_PYTEST = [pytest.param(x[1], x[0], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
 
 
 class TestDecodeCrockfordB32:
