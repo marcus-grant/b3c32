@@ -16,9 +16,9 @@ import pytest
 
 from depo.util.shortcode import (
     _CROCKFORD32,
+    _decode_crockford_b32,
     _encode_crockford_b32,
     canonicalize_code,
-    decode_crockford_b32,
     hash_full_b32,
 )
 
@@ -293,27 +293,27 @@ class TestDecodeCrockfordB32:
     @pytest.mark.parametrize("code,expect", KNOWN_DECODE_PYTEST)
     def test_inverts_known_vectors(self, code, expect):
         """Every known encode vector decodes back to its original bytes."""
-        assert decode_crockford_b32(code) == expect
+        assert _decode_crockford_b32(code) == expect
 
     @pytest.mark.parametrize("bad", ["I", "L", "O", "U"])
     def test_rejects_ambiguous_letters(self, bad: str):
         """Visually ambiguous symbols rejected. Coerce to 0,1 with canonicalize_code.
         So strict decode rejecting them is what keeps the layers distinct."""
         with pytest.raises(ValueError):
-            decode_crockford_b32(f"ABC{bad}123")
+            _decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["a", "b", "z"])
     def test_rejects_lowercase(self, bad: str):
         """Strict decode is case-sensitive; canonicalize first."""
         with pytest.raises(ValueError):
-            decode_crockford_b32(f"ABC{bad}123")
+            _decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["*", "~", "$", "=", "U"])
     def test_rejects_checksum_symbols(self, bad: str):
         """Mod-37 check symbols are reserved, not data.
         Strict decode doesnt checksum; rejects rather than treating them as payload."""
         with pytest.raises(ValueError):
-            decode_crockford_b32(f"ABC{bad}123")
+            _decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["!", "-", " ", ":", "_", "@", "\n"])
     def test_rejects_other_non_alphabet(self, bad: str):
@@ -321,7 +321,7 @@ class TestDecodeCrockfordB32:
         Separators & whitespaceincluded because canonicalize_code strips them.
         Their rejection here confirms strict decode does no normalization."""
         with pytest.raises(ValueError):
-            decode_crockford_b32(f"ABC{bad}123")
+            _decode_crockford_b32(f"ABC{bad}123")
 
 
 class TestCodecRoundtrip:
@@ -340,7 +340,7 @@ class TestCodecRoundtrip:
         """Every input up to two bytes survives encode then decode."""
         for data in _exhaustive_small_inputs():
             msg = f"mismatch on {data!r}"
-            assert decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
+            assert _decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
 
     def test_roundtrips_random_inputs(self):
         """Random inputs of varied length survive encode then decode.
@@ -352,12 +352,13 @@ class TestCodecRoundtrip:
         seed, inputs = _random_inputs()
         for data in inputs:
             msg = f"mismatch on {data!r} (seed={seed})"
-            assert decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
+            assert _decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
 
     @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_roundtrips_known_vectors(self, data: bytes, expect: str):
         """Every known vector's original bytes survive the round trip."""
-        assert decode_crockford_b32(_encode_crockford_b32(data)) == data
+        _ = expect  # To shut up LSP
+        assert _decode_crockford_b32(_encode_crockford_b32(data)) == data
 
 
 @pytest.mark.skip(_SKIP_MSG)

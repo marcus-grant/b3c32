@@ -27,21 +27,7 @@ def _encode_crockford_b32(data: bytes) -> str:
     return result
 
 
-def hash_full_b32(data: bytes) -> str:
-    """Compute a BLAKE2b 120-bit hash and return as Crockford Base32 string.
-
-    Args:
-        data: The bytes to hash.
-
-    Returns:
-        A 24-character Crockford Base32 encoded string representing
-        the 120-bit BLAKE2b hash digest.
-    """
-    digest = hashlib.blake2b(data, digest_size=15).digest()
-    return _encode_crockford_b32(digest)
-
-
-def decode_crockford_b32(code: str) -> bytes:
+def _decode_crockford_b32(code: str) -> bytes:
     """Decode canonical Crockford Base32 to bytes.
 
     Symbols are taken MSB-first in 5-bit groups. Trailing bits that do
@@ -67,6 +53,20 @@ def decode_crockford_b32(code: str) -> bytes:
     # Trailing bits past the last whole byte are encoder pad, so drop them
     accumulated_int >>= bit_count % 8
     return accumulated_int.to_bytes(bit_count // 8, "big")
+
+
+def hash_full_b32(data: bytes) -> str:
+    """Compute a BLAKE2b 120-bit hash and return as Crockford Base32 string.
+
+    Args:
+        data: The bytes to hash.
+
+    Returns:
+        A 24-character Crockford Base32 encoded string representing
+        the 120-bit BLAKE2b hash digest.
+    """
+    digest = hashlib.blake2b(data, digest_size=15).digest()
+    return _encode_crockford_b32(digest)
 
 
 _TRANS_CROCKFORD_AMBIG = str.maketrans(
