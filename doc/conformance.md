@@ -10,12 +10,12 @@ where each expected value comes from.
 
 ## The scheme
 
-Addresses are unkeyed blake3, sliced on a 40-bit ladder, encoded low-pad
+Codes are unkeyed blake3, sliced on a 40-bit ladder, encoded low-pad
 bitstream Crockford Base32. Unkeyed is load-bearing, not a default: keying
-would make identical content produce different addresses, which defeats
+would make identical content produce different codes, which defeats
 content-addressing by breaking cross-project dedup and recompute from
 content. Enumeration privacy, if ever wanted, belongs at the access layer
-that governs who may resolve an address, never in the hash.
+that governs who may resolve a code, never in the hash.
 
 The 40-bit ladder is the least common multiple of the 8-bit byte and the
 5-bit Crockford symbol. Exact prefixing (a short code being a true prefix
@@ -55,8 +55,8 @@ independent code lineage are compared live every run: a from-scratch
 bit-window encoder (the shipped implementation) and the standard library's
 RFC 4648 base32 plus a separately-certified alphabet map (the verifier). A
 foreign-runtime RFC 4648 encoder, padding stripped and alphabet translated,
-reduces the shared-substrate residual over arbitrary inputs. Where the draft
-diverges from crockford.com, the draft wins.
+reduces the shared-substrate residual; it runs as a separate audit rather
+than in the suite, described under Verification artifacts. Where the draft
 
 ## Alphabet independence
 
@@ -101,16 +101,17 @@ with the seed and the minimal failing input in every failure message so a
 failure reproduces and graduates into the frozen file.
 
 Composition joins the two: reference input, pinned reference hex, encoder
-lineages agree, address. Reference inputs only, so every digest stays
-externally certified. No external expected address exists or is needed: the
+lineages agree, code. Reference inputs only, so every digest stays
+externally certified. No external expected code exists or is needed: the
 composition is trustworthy on the reference inputs because those digests are
 externally certified and the encoder agrees across lineages and substrates
 on them, with exhaustive-small and property fuzz extending confidence toward
-domain-completeness. The ladder prefix class slices at two ladder-aligned
-lengths crossing the 64-byte boundary and asserts both the digest-byte and
-encoded-string prefixes hold. The ladder guard asserts prefixing holds
-on-ladder and breaks off-ladder, so widening to a non-40-bit width fails red
-rather than silently; width is enforced at the XOF cut.
+domain-completeness. The aligned prefix class slices at two lengths that are
+multiples of 40 bits, crossing the 64-byte boundary, and asserts both the
+digest-byte and encoded-string prefixes hold. The alignment guard asserts
+prefixing holds when the narrow width is a multiple of 40 bits and breaks
+when it is not, so widening to a non-aligned width fails red rather than
+silently; width is enforced at the XOF cut.
 
 ## Frozen versus live
 
@@ -125,34 +126,69 @@ file as infallible.
 ## Decoder contract
 
 The strict core rejects anything outside the canonical alphabet, including
-U, O, I, L, and depo ships the strict core. U is not an ambiguity coercion
-in the class of O, I, L: those are excluded for visual ambiguity and are
-invalid in both the data alphabet and the checksum set, so coercing them is
-unconditionally safe, whereas U was dropped to reach 32 characters (a vowel,
-to avoid forming words) and then reserved with four non-alphanumerics as the
-optional mod-37 checksum symbols, so U is meaningful (value 36) in a
-checksummed string. A later lenient wrapper, per-project and opt-in with
-caller-declared flags, coerces O to 0 and I and L to 1 unconditionally, but
-coerces U to V only when both lenience is on and the input is declared
-non-checksum; U is never coerced by inference. Lenient decode never emits a
-stored value; it funnels human input toward the one canonical form, so it
-cannot cause dialect drift. depo intends to ship the lenient wrapper as its
-default lookup path once available, since human code entry needs it; details
-of depo's canonicalization are in [shortcodes](./shortcodes.md).
+U, O, I, L, and depo ships it as `_decode_crockford_b32`. U is not an
+ambiguity coercion in the class of O, I, L: those are excluded for visual
+ambiguity and are invalid in both the data alphabet and the checksum set, so
+coercing them is unconditionally safe, whereas U was dropped to reach 32
+characters (a vowel, to avoid forming words) and then reserved with four
+non-alphanumerics as the optional mod-37 checksum symbols, so U is
+meaningful (value 36) in a checksummed string. `canonicalize_code`, depo's
+lenient lookup path, therefore rejects U as well: coercing it to V requires
+an explicit non-checksum declaration that no caller can yet make. A later
+lenient wrapper with caller-declared flags would coerce O to 0 and I and L
+to 1 unconditionally, and U to V only when both lenience is on and the input
+is declared non-checksum; U is never coerced by inference. Lenient decode
+never emits a stored value; it funnels human input toward the one canonical
+form, so it cannot cause dialect drift. Details of depo's canonicalization
+are in [shortcodes](./shortcodes.md).
 
-## Wrong-address resolution
+Decode discards trailing bits that do not complete a byte rather than
+padding up to one. Those bits are pad the encoder introduced to fill a
+symbol, never input, so discarding them recovers the message rather than the
+transport artifact. This makes `decode(encode(x))` hold for every byte
+input, where padding up would fail for every input whose bit length is not a
+byte multiple. The theoretical ambiguity it accepts, a code whose final
+partial symbol carried real bits, is unreachable for codes depo produces
+since they all originate from the encoder.
+
+## Verification artifacts
+
+The pinned reference vectors are vendored at
+`tests/vectors/blake3-1.8.5-93a431c.json`, and the suite asserts the file's
+SHA-256 against the recorded pin so a swapped or corrupted file fails loud
+rather than certifying against wrong values.
+
+depo's own vectors are published at `tests/vectors/depo-conformance.json`,
+generated by `scripts/generate-conformance-vectors.py`. The generator holds
+every hand-derived value as a literal and asserts the implementation
+reproduces each before emitting; those literals are a deliberate second copy
+of the test module's constants, and the generator is what catches drift
+between them.
+
+`scripts/audit-conformance-vectors.sh` rederives every published vector
+using only external tools: b3sum for digests, coreutils basenc for the
+bit-packing, tr for the alphabet remap. Nothing from depo's implementation
+is in the loop, so agreement is cross-substrate rather than cross-lineage
+within one runtime.
+
+Every encoder vector and all five reference encodings were additionally
+confirmed by hand against two independent web codecs during derivation. Only
+the convenience vectors rest on depo's implementation alone; they detect
+change, not error, and are labelled as such.
+
+## Wrong-code resolution
 
 Hash bugs are effectively all-or-nothing: a broken hasher fails the
 reference vectors on the first run, so a silently-wrong hasher persisting is
-not realistic. If a wrong but deterministic address was stored before
-detection it is still internally consistent, every reference reaching the
-right content, mislabeled only against canonical. The immediate stopgap
-flags the address as known non-canonical, keeps presenting it consistently
-internally, and withholds it from canonical interop so no peer mis-dedups.
-Full resolution, once the mutable-link layer exists, offers the owner a
-choice to rehash (correcting the code, aliasing old to new so circulated
-references survive) or keep the stable circulated code, since rehashing is a
-mutation of an otherwise immutable address.
+not realistic. If a wrong but deterministic code was stored before detection
+it is still internally consistent, every reference reaching the right
+content, mislabeled only against canonical. The immediate stopgap flags the
+code as known non-canonical, keeps presenting it consistently internally,
+and withholds it from canonical interop so no peer mis-dedups. Full
+resolution, once the mutable-link layer exists, offers the owner a choice to
+rehash (correcting the code, aliasing old to new so circulated references
+survive) or keep the stable circulated code, since rehashing is a mutation
+of an otherwise immutable code.
 
 ## Honest scope
 
@@ -169,3 +205,4 @@ to the reference file, the draft, and the runtimes, up to the coverage of
 the sampled and exhaustive classes. The contract is final when the
 independent per-repo derivations converge, and reopens if a better proof or
 an error is found.
+
