@@ -8,16 +8,22 @@ License: Apache-2.0
 """
 
 import base64
+import hashlib
+import json
 import random
 import secrets
 import string
+from pathlib import Path
 
 import pytest
+from blake3 import blake3
 
 from depo.util.shortcode import (
     _CROCKFORD32,
+    _HASH_DIGEST_LEN_BYTES,
     _decode_crockford_b32,
     _encode_crockford_b32,
+    _hash_digest,
     canonicalize_code,
     hash_full_b32,
 )
@@ -359,6 +365,77 @@ class TestCodecRoundtrip:
         """Every known vector's original bytes survive the round trip."""
         _ = expect  # To shut up LSP
         assert _decode_crockford_b32(_encode_crockford_b32(data)) == data
+
+
+class TestHashDigest:
+    """The shipped hasher conforms to the BLAKE3 reference vectors.
+
+    Expected values come from the vendored reference file, never from
+    depo's own hasher, so the assertion can detect a wrong hasher rather
+    than comparing it against itself. Inputs are reconstructed by the
+    rule the reference file states: byte i is i mod 251. Only the
+    unkeyed hash field is used; keyed_hash and derive_key are other
+    modes and are not depo's scheme.
+    """
+
+    VECTOR_FILE = Path(__file__).parent.parent / "vectors" / "blake3-1.8.5-93a431c.json"
+
+    def _load_blake3_cases(self) -> list[dict]:
+        """Reference cases from the vendored pinned vector file."""
+        return json.loads(self.VECTOR_FILE.read_text(encoding="utf-8"))["cases"]
+
+    def _reference_input(self, input_len: int) -> bytes:
+        """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
+        return bytes(i % 251 for i in range(input_len))
+
+    def test_vector_file_matches_pinned_hash(self):
+        """Vendored reference file is byte-identical to the pinned SHA-256,
+        so a swapped or corrupted file fails loud."""
+        expect = "dcb91ea8accc77e6d6e632af7cdc1a99a9f3ae78cf648da595c7d064db32f624"
+        actual = hashlib.sha256(self.VECTOR_FILE.read_bytes()).hexdigest()
+        assert actual == expect
+
+    def test_digest_matches_reference_prefix(self):
+        """Digest == first 15 bytes of the reference hash for every case in the file."""
+        for case in self._load_blake3_cases():
+            msg = f"mismatch on input_len={case['input_len']}"
+            expect = bytes.fromhex(case["hash"][:30])
+            assert _hash_digest(self._reference_input(case["input_len"])) == expect, msg
+
+    def test_digest_is_120_bits(self):
+        """The digest is exactly 15 bytes, the 120-bit current hash digest size."""
+        assert _HASH_DIGEST_LEN_BYTES * 8 == 120
+        assert len(_hash_digest(b"")) == _HASH_DIGEST_LEN_BYTES
+        assert len(_hash_digest(b"x" * 1025)) == _HASH_DIGEST_LEN_BYTES
+
+    def test_chunk_boundary_lengths(self):
+        """Inputs at blake3's chunk boundaries conform: 1023, 1024, 1025,
+        2048, 2049. Singled out because the reference documents them as
+        where the chunk tree engages."""
+        boundaries = {1023, 1024, 1025, 2048, 2049}
+        cases = [c for c in self._load_blake3_cases() if c["input_len"] in boundaries]
+        assert len(cases) == len(boundaries)
+        for case in cases:
+            digest = _hash_digest(self._reference_input(case["input_len"]))
+            msg = f"chunk boundary mismatch at input_len={case['input_len']}"
+            assert digest == bytes.fromhex(case["hash"][:30]), msg
+
+    def test_reference_output_is_prefix_consistent(self):
+        """Contract 4.2. Digest prefixes reference output past the 64B XOF block."""
+        for case in self._load_blake3_cases():
+            data = self._reference_input(case["input_len"])
+            full = bytes.fromhex(case["hash"])
+            msg = f"prefix broken at input_len={case['input_len']}"
+            assert len(full) > 64, "reference output must cross the XOF block"
+            assert full.startswith(_hash_digest(data)), msg
+
+    def test_shipped_build_is_prefix_consistent(self):
+        """Contract 4.3. Shipped blake3 short output prefixes a longer one."""
+        for data in [b"", b"\x00", b"hello", b"x" * 1025]:
+            long_output = blake3(data).digest(length=131)
+            msg = f"shipped build prefix broken on {data!r}"
+            assert len(long_output) > 64, "long output must cross the XOF block"
+            assert long_output.startswith(_hash_digest(data)), msg
 
 
 @pytest.mark.skip(_SKIP_MSG)

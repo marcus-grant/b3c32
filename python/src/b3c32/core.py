@@ -1,5 +1,8 @@
 import hashlib
 
+from blake3 import blake3
+
+_HASH_DIGEST_LEN_BYTES = 15
 _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
@@ -25,6 +28,22 @@ def _encode_crockford_b32(data: bytes) -> str:
         symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
         result += _CROCKFORD32[symbol_num]
     return result
+
+
+def _hash_digest(data: bytes) -> bytes:
+    """Compute the content digest for a shortcode.
+
+    Unkeyed BLAKE3, sliced to 120 bits (15 bytes) on the 40-bit ladder.
+    Unkeyed is load-bearing: keying would make identical content produce
+    different addresses, defeating content-addressing.
+
+    Args:
+        data: The bytes to hash.
+
+    Returns:
+        The 15-byte digest.
+    """
+    return blake3(data).digest(length=_HASH_DIGEST_LEN_BYTES)
 
 
 def _decode_crockford_b32(code: str) -> bytes:
