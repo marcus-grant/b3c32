@@ -46,7 +46,6 @@ _TRANS_CROCKFORD_AMBIG = str.maketrans(
         "O": "0",
         "I": "1",
         "L": "1",
-        "U": "V",
     }
 )
 
