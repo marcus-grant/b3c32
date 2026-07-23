@@ -1,4 +1,3 @@
-
 from blake3 import blake3
 
 _HASH_DIGEST_LEN_BYTES = 15
@@ -22,11 +21,11 @@ def _encode_crockford_b32(data: bytes) -> str:
     num, bit_count = int.from_bytes(data, byteorder="big"), len(data) * 8
     symbol_count = (bit_count + 4) // 5  # ceil(bits / 5)
     num <<= (5 - bit_count % 5) % 5  # low-pad to next 5-bit boundary
-    result = ""
+    symbols = []
     for i in range(symbol_count):
         symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
-        result += _CROCKFORD32[symbol_num]
-    return result
+        symbols.append(_CROCKFORD32[symbol_num])
+    return "".join(symbols)
 
 
 def _hash_digest(data: bytes) -> bytes:

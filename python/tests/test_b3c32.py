@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 from blake3 import blake3
+from hypothesis import given
+from hypothesis import strategies as st
 
 from depo.util.shortcode import (
     _CROCKFORD32,
@@ -69,6 +71,33 @@ CONVENIENCE_ENCODED_VECTORS = [
 ]
 CONVENIENCE_ENCODED_PYTEST = [
     pytest.param(x[0], x[1], id=x[2]) for x in CONVENIENCE_ENCODED_VECTORS
+]
+
+# Contract 4.6. 0xAA repeated, lengths 10-14 covering all five pad residues.
+PERIODIC_AA_VECTORS = [
+    (10, "NANANANANANANANA"),
+    (11, "NANANANANANANANAN8"),
+    (12, "NANANANANANANANANAN0"),
+    (13, "NANANANANANANANANANAM"),
+    (14, "NANANANANANANANANANANAG"),
+]
+
+# Contract 4.6. 0xFF repeated, same lengths. Uniform period, tail-confirmer only.
+PERIODIC_FF_VECTORS = [
+    (10, "Z" * 16),
+    (11, ("Z" * 17) + "W"),
+    (12, ("Z" * 19) + "G"),
+    (13, ("Z" * 20) + "Y"),
+    (14, ("Z" * 22) + "R"),
+]
+
+# Contract 4.6. 0x00 repeated, same lengths. Tail-blind, certifies length only.
+PERIODIC_ZERO_VECTORS = [
+    (10, "0" * 16),
+    (11, "0" * 18),
+    (12, "0" * 20),
+    (13, "0" * 21),
+    (14, "0" * 23),
 ]
 
 
@@ -135,6 +164,53 @@ class TestHashFullB32:
         wide = _encode_crockford_b32(data)
         assert wide.startswith(_encode_crockford_b32(data[:15]))
         assert not wide.startswith(_encode_crockford_b32(data[:16]))
+
+    @given(st.binary(max_size=256))
+    def test_roundtrip(self, data: bytes):
+        """decode(encode(x)) recovers x for any byte input."""
+        assert _decode_crockford_b32(_encode_crockford_b32(data)) == data
+
+    @given(st.binary(max_size=256))
+    def test_alphabet_closure(self, data: bytes):
+        """Encoded output contains only alphabet symbols."""
+        assert set(_encode_crockford_b32(data)) <= set(_CROCKFORD32)
+
+    @given(st.binary(max_size=256))
+    def test_length_invariant(self, data: bytes):
+        """Output length is ceil(input bits / 5)."""
+        assert len(_encode_crockford_b32(data)) == -(-len(data) * 8 // 5)
+
+    @given(st.binary(min_size=5, max_size=256), st.binary(max_size=256))
+    def test_prefix_law(self, head: bytes, tail: bytes):
+        """Encoding a 40-bit-aligned prefix prefixes the whole encoding."""
+        aligned = head[: len(head) // 5 * 5]
+        prefix = _encode_crockford_b32(aligned)
+        assert _encode_crockford_b32(aligned + tail).startswith(prefix)
+
+    @pytest.mark.parametrize("length,expect", PERIODIC_AA_VECTORS)
+    def test_periodic_aa(self, length: int, expect: str):
+        """Contract 4.6. 0xAA at each pad residue. Alternating symbols
+        catch ordering and transposition errors."""
+        assert _encode_crockford_b32(b"\xaa" * length) == expect
+
+    @pytest.mark.parametrize("length,expect", PERIODIC_FF_VECTORS)
+    def test_periodic_ff(self, length: int, expect: str):
+        """Contract 4.6. 0xFF at each pad residue. Uniform period, so it
+        confirms tail placement only and is blind to ordering."""
+        assert _encode_crockford_b32(b"\xff" * length) == expect
+
+    @pytest.mark.parametrize("length,expect", PERIODIC_ZERO_VECTORS)
+    def test_periodic_zero(self, length: int, expect: str):
+        """Contract 4.6. 0x00 at each pad residue. Tail-blind; certifies
+        length only, never pad behavior."""
+        assert _encode_crockford_b32(b"\x00" * length) == expect
+
+    def test_long_tiling_matches_literal_encode(self):
+        """Contract 4.6. A long 0xAA encode equals period-times-N plus
+        tail. The expression is a cross-check and failure localizer, not
+        the source of the expected value."""
+        literal = _encode_crockford_b32(b"\xaa" * 105)
+        assert literal == "NA" * 84
 
 
 class TestCrockfordAlphabet:
