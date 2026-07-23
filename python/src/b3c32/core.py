@@ -41,6 +41,34 @@ def hash_full_b32(data: bytes) -> str:
     return _encode_crockford_b32(digest)
 
 
+def decode_crockford_b32(code: str) -> bytes:
+    """Decode canonical Crockford Base32 to bytes.
+
+    Symbols are taken MSB-first in 5-bit groups. Trailing bits that do
+    not complete a byte are discarded: they are pad the encoder added to
+    fill a whole symbol, never part of the input. Reference
+    implementation of the encoding's inverse.
+
+    Args:
+        code: Canonical (uppercase, alphabet-only) Crockford string.
+
+    Returns:
+        The decoded bytes.
+
+    Raises:
+        ValueError: A character is outside the Crockford alphabet.
+    """
+    accumulated_int = 0
+    for symbol in code:
+        symbol_int_value = _CROCKFORD32.index(symbol)
+        # Shift left 5 to make room, OR to append this symbol's bits
+        accumulated_int = (accumulated_int << 5) | symbol_int_value
+    bit_count = 5 * len(code)
+    # Trailing bits past the last whole byte are encoder pad, so drop them
+    accumulated_int >>= bit_count % 8
+    return accumulated_int.to_bytes(bit_count // 8, "big")
+
+
 _TRANS_CROCKFORD_AMBIG = str.maketrans(
     {
         "O": "0",

@@ -18,6 +18,7 @@ from depo.util.shortcode import (
     _CROCKFORD32,
     _encode_crockford_b32,
     canonicalize_code,
+    decode_crockford_b32,
     hash_full_b32,
 )
 
@@ -46,6 +47,25 @@ HASHB32_4099xZERO_BYTES = "DCJF8WQMWPFWGA3ZTB62HJA2"
 HASHB32_4099xAA_BYTES = "SXBV2Q0G5PZNCC60ED9AXGBZ"
 
 _SKIP_MSG = "Needs to have conformance work done"
+
+
+def _exhaustive_small_inputs() -> list[bytes]:
+    """Every byte string up to two bytes: empty, all 256 single bytes,
+    all 65536 pairs. Small enough to enumerate, wide enough to cover
+    the single-byte and cross-byte-boundary cases."""
+    cases: list[bytes] = [b""]
+    cases += [bytes([i]) for i in range(256)]
+    cases += [bytes([i, j]) for i in range(256) for j in range(256)]
+    return cases
+
+
+def _random_inputs(count: int = 2000, max_len: int = 64) -> tuple[int, list[bytes]]:
+    """Random byte strings of varied length, with the seed that produced
+    them. Seeded nondeterministically so coverage compounds across runs;
+    the seed is returned so a failure message can carry it."""
+    seed = secrets.randbits(64)
+    rng = random.Random(seed)
+    return seed, [rng.randbytes(rng.randint(0, max_len)) for _ in range(count)]
 
 
 @pytest.mark.skip(_SKIP_MSG)
@@ -155,7 +175,7 @@ KNOWN_ENCODE_VECTORS = [
     (b"test", "EHJQ6X0", "IETF-draft-test"),
 ]
 
-DRAFT_VECTORS_PYTEST = [pytest.param(x[0], x[1], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
+KNOWN_ENCODE_PYTEST = [pytest.param(x[0], x[1], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
 
 
 class TestCrockfordEncode:
@@ -166,7 +186,7 @@ class TestCrockfordEncode:
     Found at https://datatracker.ietf.org/doc/html/draft-crockford-base32-03#section-3.1
     """
 
-    @pytest.mark.parametrize("data,expect", DRAFT_VECTORS_PYTEST)
+    @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_known_encodings(self, data: bytes, expect: str):
         """Verify encoding against hand-calculated values.
 
@@ -203,7 +223,7 @@ class TestEncoderCrossLineage:
 
     _RFC4648_B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
-    def _verify_encode_crockford_b32(self, data: bytes) -> str:
+    def _crock32_verifier(self, data: bytes) -> str:
         """Independent-lineage Crockford encoder for cross-checking.
 
         Uses stdlib base64.b32encode (RFC 4648), strips '=' padding, and
@@ -215,7 +235,7 @@ class TestEncoderCrossLineage:
         b32 = base64.b32encode(data).decode("ascii").rstrip("=")
         return b32.translate(_CROCK_TRANS)
 
-    @pytest.mark.parametrize("data,expect", DRAFT_VECTORS_PYTEST)
+    @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_matches_known_vectors(self, data, expect):
         """The verifier independently reproduces every known-value vector.
 
@@ -226,7 +246,7 @@ class TestEncoderCrossLineage:
         here means the verifier itself is wrong, not the encoder.
         """
         _ = expect  # To shut up LSP
-        assert _encode_crockford_b32(data) == self._verify_encode_crockford_b32(data)
+        assert _encode_crockford_b32(data) == self._crock32_verifier(data)
 
     def test_agrees_exhaustive_small(self):
         """Shipped encoder and verifier agree on every input up to two
@@ -236,13 +256,9 @@ class TestEncoderCrossLineage:
         empty input. Longer lengths and the remaining pad residues are
         covered by the random test.
         """
-        cases: list[bytes] = [b""]
-        cases += [bytes([i]) for i in range(256)]
-        cases += [bytes([i, j]) for i in range(256) for j in range(256)]
-        result = _encode_crockford_b32(b"")  # our function
-        verifier_result = self._verify_encode_crockford_b32(b"")  # verifier
-        for data in cases:
-            assert result == verifier_result, f"mismatch on {data!r}"
+        for data in _exhaustive_small_inputs():
+            msg = f"mismatch on {data!r}"
+            assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
 
     def test_agrees_on_random_inputs(self):
         """Shipped encoder and verifier agree on random inputs of varied
@@ -253,14 +269,95 @@ class TestEncoderCrossLineage:
         the seed and the failing input are in the assertion message so any
         failure reproduces.
         """
-        seed = secrets.randbits(64)
-        rng = random.Random(seed)
-        for _ in range(2000):
-            length = rng.randint(0, 64)
-            data = rng.randbytes(length)
-            assert _encode_crockford_b32(data) == self._verify_encode_crockford_b32(
-                data
-            ), f"mismatch on {data!r} (seed={seed})"
+        seed, inputs = _random_inputs()
+        for data in inputs:
+            msg = f"mismatch on {data!r} (seed={seed})"
+            assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
+
+
+# Invert the KNOWN_ENCODE_VECTORS for decode tests: (encoded, original, id)
+KNOWN_DECODE_PYTEST = [pytest.param(x[1], x[0], id=x[2]) for x in KNOWN_ENCODE_VECTORS]
+
+
+class TestDecodeCrockfordB32:
+    """Strict decode is the inverse of the encoder.
+
+    Symbols are taken MSB-first in 5-bit groups and trailing bits that
+    do not complete a byte are discarded, since those bits are pad the
+    encoder introduced to fill a symbol, not input. This makes decode
+    recover the original bytes exactly, so the known vectors invert.
+    Input must already be canonical; leniency is composed by passing
+    through canonicalize_code first.
+    """
+
+    @pytest.mark.parametrize("code,expect", KNOWN_DECODE_PYTEST)
+    def test_inverts_known_vectors(self, code, expect):
+        """Every known encode vector decodes back to its original bytes."""
+        assert decode_crockford_b32(code) == expect
+
+    @pytest.mark.parametrize("bad", ["I", "L", "O", "U"])
+    def test_rejects_ambiguous_letters(self, bad: str):
+        """Visually ambiguous symbols rejected. Coerce to 0,1 with canonicalize_code.
+        So strict decode rejecting them is what keeps the layers distinct."""
+        with pytest.raises(ValueError):
+            decode_crockford_b32(f"ABC{bad}123")
+
+    @pytest.mark.parametrize("bad", ["a", "b", "z"])
+    def test_rejects_lowercase(self, bad: str):
+        """Strict decode is case-sensitive; canonicalize first."""
+        with pytest.raises(ValueError):
+            decode_crockford_b32(f"ABC{bad}123")
+
+    @pytest.mark.parametrize("bad", ["*", "~", "$", "=", "U"])
+    def test_rejects_checksum_symbols(self, bad: str):
+        """Mod-37 check symbols are reserved, not data.
+        Strict decode doesnt checksum; rejects rather than treating them as payload."""
+        with pytest.raises(ValueError):
+            decode_crockford_b32(f"ABC{bad}123")
+
+    @pytest.mark.parametrize("bad", ["!", "-", " ", ":", "_", "@", "\n"])
+    def test_rejects_other_non_alphabet(self, bad: str):
+        """Other symbols outside the alphabet raises.
+        Separators & whitespaceincluded because canonicalize_code strips them.
+        Their rejection here confirms strict decode does no normalization."""
+        with pytest.raises(ValueError):
+            decode_crockford_b32(f"ABC{bad}123")
+
+
+class TestCodecRoundtrip:
+    """Encoding then decoding recovers the original bytes.
+
+    This is a property of the encoder and decoder as a pair, not of
+    either alone, which is why it lives in its own class. It holds in
+    the bytes-first direction only: decode discards trailing bits that
+    do not complete a byte, so a code whose bit length is not a byte
+    multiple loses its final partial symbol and encode(decode(code)) is
+    not a law. Asserting only the direction that holds keeps the
+    asymmetry explicit rather than looking like a missing test.
+    """
+
+    def test_roundtrips_exhaustive_small(self):
+        """Every input up to two bytes survives encode then decode."""
+        for data in _exhaustive_small_inputs():
+            msg = f"mismatch on {data!r}"
+            assert decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
+
+    def test_roundtrips_random_inputs(self):
+        """Random inputs of varied length survive encode then decode.
+
+        Nondeterministic seed per run so coverage compounds; the seed and
+        the failing input are in the assertion message so any failure
+        reproduces.
+        """
+        seed, inputs = _random_inputs()
+        for data in inputs:
+            msg = f"mismatch on {data!r} (seed={seed})"
+            assert decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
+
+    @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
+    def test_roundtrips_known_vectors(self, data: bytes, expect: str):
+        """Every known vector's original bytes survive the round trip."""
+        assert decode_crockford_b32(_encode_crockford_b32(data)) == data
 
 
 @pytest.mark.skip(_SKIP_MSG)
