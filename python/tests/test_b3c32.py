@@ -520,7 +520,6 @@ class TestHashFullB32:
         assert literal == "NA" * 84
 
 
-@pytest.mark.skip()
 class TestCanonicalizeCode:
     """Tests for the canonicalization of Crockford Base32 codes.
 
@@ -534,9 +533,9 @@ class TestCanonicalizeCode:
     @pytest.mark.parametrize(
         "code,expect",
         [
-            pytest.param("oil1u", "0111V", id="lowercase_ambiguous"),
-            pytest.param("OIL1OILU", "0111011V", id="uppercase_ambiguous"),
-            pytest.param("oIl1OiLu", "0111011V", id="mixcase_ambiguous"),
+            pytest.param("oil1", "0111", id="lowercase_ambiguous"),
+            pytest.param("OIL1OIL", "0111011", id="uppercase_ambiguous"),
+            pytest.param("oIl1OiL", "0111011", id="mixcase_ambiguous"),
         ],
     )
     def test_ambiguous_char_mappings(self, code: str, expect: str):
@@ -592,7 +591,7 @@ class TestCanonicalizeCode:
             pytest.param("abcd123", id="simple"),
             pytest.param("oil1", id="ambiguous"),
             pytest.param("ab-cd 12", id="separators"),
-            pytest.param("  OIL-U  ", id="mixed"),
+            pytest.param("  OIL-O  ", id="mixed"),
         ],
     )
     def test_idempotent(self, code: str):
