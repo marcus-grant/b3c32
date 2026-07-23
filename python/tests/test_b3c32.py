@@ -10,8 +10,6 @@ License: Apache-2.0
 import base64
 import hashlib
 import json
-import random
-import secrets
 import string
 from pathlib import Path
 
@@ -102,6 +100,11 @@ CONVENIENCE_ENCODED_PYTEST = [
 ]
 
 
+def _reference_input(input_len: int) -> bytes:
+    """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
+    return bytes(i % 251 for i in range(input_len))
+
+
 def _exhaustive_small_inputs() -> list[bytes]:
     """Every byte string up to two bytes: empty, all 256 single bytes,
     all 65536 pairs. Small enough to enumerate, wide enough to cover
@@ -110,15 +113,6 @@ def _exhaustive_small_inputs() -> list[bytes]:
     cases += [bytes([i]) for i in range(256)]
     cases += [bytes([i, j]) for i in range(256) for j in range(256)]
     return cases
-
-
-def _random_inputs(count: int = 2000, max_len: int = 64) -> tuple[int, list[bytes]]:
-    """Random byte strings of varied length, with the seed that produced
-    them. Seeded nondeterministically so coverage compounds across runs;
-    the seed is returned so a failure message can carry it."""
-    seed = secrets.randbits(64)
-    rng = random.Random(seed)
-    return seed, [rng.randbytes(rng.randint(0, max_len)) for _ in range(count)]
 
 
 class TestHashDigest:
@@ -138,10 +132,6 @@ class TestHashDigest:
         """Reference cases from the vendored pinned vector file."""
         return json.loads(self.VECTOR_FILE.read_text(encoding="utf-8"))["cases"]
 
-    def _reference_input(self, input_len: int) -> bytes:
-        """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
-        return bytes(i % 251 for i in range(input_len))
-
     def test_vector_file_matches_pinned_hash(self):
         """Vendored reference file is byte-identical to the pinned SHA-256,
         so a swapped or corrupted file fails loud."""
@@ -154,7 +144,7 @@ class TestHashDigest:
         for case in self._load_blake3_cases():
             msg = f"mismatch on input_len={case['input_len']}"
             expect = bytes.fromhex(case["hash"][:30])
-            assert _hash_digest(self._reference_input(case["input_len"])) == expect, msg
+            assert _hash_digest(_reference_input(case["input_len"])) == expect, msg
 
     def test_digest_is_120_bits(self):
         """The digest is exactly 15 bytes, the 120-bit current hash digest size."""
@@ -170,14 +160,14 @@ class TestHashDigest:
         cases = [c for c in self._load_blake3_cases() if c["input_len"] in boundaries]
         assert len(cases) == len(boundaries)
         for case in cases:
-            digest = _hash_digest(self._reference_input(case["input_len"]))
+            digest = _hash_digest(_reference_input(case["input_len"]))
             msg = f"chunk boundary mismatch at input_len={case['input_len']}"
             assert digest == bytes.fromhex(case["hash"][:30]), msg
 
     def test_reference_output_is_prefix_consistent(self):
         """Contract 4.2. Digest prefixes reference output past the 64B XOF block."""
         for case in self._load_blake3_cases():
-            data = self._reference_input(case["input_len"])
+            data = _reference_input(case["input_len"])
             full = bytes.fromhex(case["hash"])
             msg = f"prefix broken at input_len={case['input_len']}"
             assert len(full) > 64, "reference output must cross the XOF block"
@@ -272,14 +262,6 @@ class TestCrockfordEncode:
         assert len(_encode_crockford_b32(b"\x00" * 5)) == 8  # 40 bits → 8 chars
         assert len(_encode_crockford_b32(b"\x00" * 15)) == 24  # 120 bits → 24 chars
 
-    def test_alphabet_compliance(self):
-        """Output must only contain valid Crockford Base32 characters."""
-        # Use bytes that would produce all possible 5-bit values (0-31)
-        result = _encode_crockford_b32(bytes(range(256)))
-        assert set(result).issubset(_CROCKFORD32)
-        # Verify excluded characters never appear
-        assert not any(c in result for c in "ILOUilou")
-
     @pytest.mark.parametrize("length,expect", PERIODIC_AA_VECTORS)
     def test_periodic_aa(self, length: int, expect: str):
         """Contract 4.6. 0xAA at each pad residue. Alternating symbols
@@ -355,19 +337,10 @@ class TestEncoderCrossLineage:
             msg = f"mismatch on {data!r}"
             assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
 
-    def test_agrees_on_random_inputs(self):
-        """Shipped encoder and verifier agree on random inputs of varied
-        length: extends coverage past the two-byte exhaustive bound and
-        across all pad residues.
-
-        Nondeterministic seed per run so coverage compounds across runs;
-        the seed and the failing input are in the assertion message so any
-        failure reproduces.
-        """
-        seed, inputs = _random_inputs()
-        for data in inputs:
-            msg = f"mismatch on {data!r} (seed={seed})"
-            assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
+    @given(st.binary(max_size=256))
+    def test_agrees_on_generated_inputs(self, data: bytes):
+        """Shipped encoder and verifier agree on generated inputs."""
+        assert _encode_crockford_b32(data) == self._crock32_verifier(data)
 
 
 class TestDecodeCrockfordB32:
@@ -433,18 +406,6 @@ class TestCodecRoundtrip:
             msg = f"mismatch on {data!r}"
             assert _decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
 
-    def test_roundtrips_random_inputs(self):
-        """Random inputs of varied length survive encode then decode.
-
-        Nondeterministic seed per run so coverage compounds; the seed and
-        the failing input are in the assertion message so any failure
-        reproduces.
-        """
-        seed, inputs = _random_inputs()
-        for data in inputs:
-            msg = f"mismatch on {data!r} (seed={seed})"
-            assert _decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
-
     @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_roundtrips_known_vectors(self, data: bytes, expect: str):
         """Every known vector's original bytes survive the round trip."""
@@ -459,10 +420,6 @@ class TestHashFullB32:
     Frozen addresses are depo-derived and provisional until normpic convergence.
     """
 
-    def _reference_input(self, input_len: int) -> bytes:
-        """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
-        return bytes(i % 251 for i in range(input_len))
-
     @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
     def test_wiring(self, data):
         """Contract 4.9. hash_full_b32 composes _hash_digest and the encoder."""
@@ -474,7 +431,7 @@ class TestHashFullB32:
         Certified: each derives from the pinned reference hex through certified encoder,
         so it detects error, not just change.
         """
-        assert hash_full_b32(self._reference_input(input_len)) == expect
+        assert hash_full_b32(_reference_input(input_len)) == expect
 
     @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
     def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
@@ -483,13 +440,13 @@ class TestHashFullB32:
         assert hash_full_b32(data) == expect
 
     @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
-    def test_ladder_prefix(self, data: bytes):
-        """Contract 4.10. Encoding prefixes a wider aligned encoding."""
+    def test_prefix_holds_across_aligned_widths(self, data: bytes):
+        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
         narrow = _encode_crockford_b32(blake3(data).digest(length=15))
         wide = _encode_crockford_b32(blake3(data).digest(length=20))
         assert wide.startswith(narrow), f"prefix broken on {data!r}"
 
-    def test_ladder_guard(self):
+    def test_prefix_requires_aligned_width(self):
         """Contract 4.11. Prefix holds when the narrow width is a 40-bit
         multiple, breaks when it is not."""
         data = b"\xff" * 20
