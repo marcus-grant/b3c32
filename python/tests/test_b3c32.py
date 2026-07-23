@@ -116,7 +116,7 @@ def _exhaustive_small_inputs() -> list[bytes]:
 
 
 class TestHashDigest:
-    """The shipped hasher conforms to the BLAKE3 reference vectors.
+    """Contract 4.1, 4.2, 4.3. The shipped hasher against reference vectors.
 
     Expected values come from the vendored reference file, never from
     depo's own hasher, so the assertion can detect a wrong hasher rather
@@ -133,29 +133,26 @@ class TestHashDigest:
         return json.loads(self.VECTOR_FILE.read_text(encoding="utf-8"))["cases"]
 
     def test_vector_file_matches_pinned_hash(self):
-        """Vendored reference file is byte-identical to the pinned SHA-256,
-        so a swapped or corrupted file fails loud."""
+        """Contract 2.1. Vendored file matches the pinned SHA-256."""
         expect = "dcb91ea8accc77e6d6e632af7cdc1a99a9f3ae78cf648da595c7d064db32f624"
         actual = hashlib.sha256(self.VECTOR_FILE.read_bytes()).hexdigest()
         assert actual == expect
 
     def test_digest_matches_reference_prefix(self):
-        """Digest == first 15 bytes of the reference hash for every case in the file."""
+        """Contract 4.1. Digest matches reference hex for every case."""
         for case in self._load_blake3_cases():
             msg = f"mismatch on input_len={case['input_len']}"
             expect = bytes.fromhex(case["hash"][:30])
             assert _hash_digest(_reference_input(case["input_len"])) == expect, msg
 
     def test_digest_is_120_bits(self):
-        """The digest is exactly 15 bytes, the 120-bit current hash digest size."""
+        """Digest width is 15 bytes. Local coverage, not a contract clause."""
         assert _HASH_DIGEST_LEN_BYTES * 8 == 120
         assert len(_hash_digest(b"")) == _HASH_DIGEST_LEN_BYTES
         assert len(_hash_digest(b"x" * 1025)) == _HASH_DIGEST_LEN_BYTES
 
     def test_chunk_boundary_lengths(self):
-        """Inputs at blake3's chunk boundaries conform: 1023, 1024, 1025,
-        2048, 2049. Singled out because the reference documents them as
-        where the chunk tree engages."""
+        """Contract 4.1. Chunk boundaries the reference singles out."""
         boundaries = {1023, 1024, 1025, 2048, 2049}
         cases = [c for c in self._load_blake3_cases() if c["input_len"] in boundaries]
         assert len(cases) == len(boundaries)
@@ -183,8 +180,8 @@ class TestHashDigest:
 
 
 class TestCrockfordAlphabet:
-    """The alphabet is pinned two independent ways, neither restating
-    the module's literal.
+    """Contract 4.4. The alphabet is pinned two independent ways, neither
+    restating the module's literal.
 
     The first route rebuilds the alphabet from stdlib constants and the
     I, L, O, U exclusion rule, asserting the literal matches. The second
@@ -239,25 +236,19 @@ class TestCrockfordAlphabet:
 
 
 class TestCrockfordEncode:
-    """Tests for the _encode_crockford_b32 helper function.
+    """Contract 4.7 and 4.6. Fixed encoder vectors and periodic patterns.
 
-    These values are hand-verifiable by converting to binary and grouping
-    into 5-bit chunks, many taken from Crockford's IETF draft examples.
-    Found at https://datatracker.ietf.org/doc/html/draft-crockford-base32-03#section-3.1
+    Known values are hand-derived and confirmed against independent
+    codecs; the IETF draft rows are externally authored.
     """
 
     @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_known_encodings(self, data: bytes, expect: str):
-        """Verify encoding against hand-calculated values.
-
-        Args:
-            data: Input bytes to encode.
-            expect: Expected Crockford Base32 output.
-        """
+        """Contract 4.7. Encoding matches hand-derived and draft values."""
         assert _encode_crockford_b32(data) == expect
 
     def test_output_length(self):
-        """Output length should be ceil(input_bits / 5)."""
+        """Output length is ceil(input bits / 5). Local coverage."""
         assert len(_encode_crockford_b32(b"\x00")) == 2  # 8 bits → 2 chars
         assert len(_encode_crockford_b32(b"\x00" * 5)) == 8  # 40 bits → 8 chars
         assert len(_encode_crockford_b32(b"\x00" * 15)) == 24  # 120 bits → 24 chars
@@ -289,7 +280,8 @@ class TestCrockfordEncode:
 
 
 class TestEncoderCrossLineage:
-    """Shipped encoder agrees with an independent-lineage verifier.
+    """Contract 4.5. Shipped encoder agrees with an independent-lineage
+    verifier.
 
     The shipped encoder is shift-and-mask bitstream; the verifier is
     stdlib RFC 4648 base32 with padding stripped and the alphabet
@@ -344,7 +336,8 @@ class TestEncoderCrossLineage:
 
 
 class TestDecodeCrockfordB32:
-    """Strict decode is the inverse of the encoder.
+    """Contract section 5, not a numbered assertion class. Strict decode
+    is the inverse of the encoder.
 
     Symbols are taken MSB-first in 5-bit groups and trailing bits that
     do not complete a byte are discarded, since those bits are pad the
@@ -389,7 +382,8 @@ class TestDecodeCrockfordB32:
 
 
 class TestCodecRoundtrip:
-    """Encoding then decoding recovers the original bytes.
+    """Contract 4.8, fixed and exhaustive cases. Encoding then decoding
+    recovers the original bytes.
 
     This is a property of the encoder and decoder as a pair, not of
     either alone, which is why it lives in its own class. It holds in
@@ -486,9 +480,14 @@ class TestCodecProperties:
 
 
 class TestCanonicalizeCode:
-    """Tests for the canonicalization of Crockford Base32 codes.
+    """Contract section 5, the lenient side. Normalizes user-typed input
+    toward canonical form.
 
-    This is not part of the original code but is important for real-world usage.
+    Coerces O to 0 and I and L to 1 unconditionally, since those are
+    invalid in both the data alphabet and the checksum set. U is
+    rejected, not coerced: it is the mod-37 check symbol, and coercing
+    it to V waits on an explicit non-checksum declaration that no caller
+    can yet make.
     """
 
     def test_uppercase_valid_input(self):
