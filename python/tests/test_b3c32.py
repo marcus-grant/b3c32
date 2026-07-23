@@ -30,31 +30,9 @@ from depo.util.shortcode import (
     hash_full_b32,
 )
 
-# To indipendantly verify hashing and encoding...
-# Use script in PROJECTROOT/scripts/hash-b32.sh
-# To generate bit pattern strings to use with script:
-# use scripts/generate-test-patterns.sh (NUM_BYTES) (PATTERN_NAME)
-# Will print blake2b 120bit digest in hex and then Crockford base32
-# As extra verification use https://cryptii.com/pipes/crockford-base32
-
-CROCKFORD_STR = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-CROCKFORD_ALPHABET = set(CROCKFORD_STR)
-
-# These are known blake2b 120bit hashes encoded in Crockford base32
-# Empty bytes, made with b""
-HASHB32_EMPTY = "PZDRE6BC90T0BS0FGG0ZM7Y9"
-# "Hello, World!" string
-HASHB32_HELLO = "D7GS0E632ZGYMQAVRXHYZ315"
-# \xff (one all 1 byte)
-HASHB32_1xFF_BYTES = "N07C0CD6R447SA6JT1CEVAWW"
-# \x00 * 5 (five all 0 bytes)
-HASHB32_5xZERO_BYTES = "DGGXXPQBAP0A56H3CJKG23P6"
-# \x00 * 4099 (prime number len of \x00 bytes). 4099B is also more than a sector size
-HASHB32_4099xZERO_BYTES = "DCJF8WQMWPFWGA3ZTB62HJA2"
-# \xaa * 4099 (prime number len of \xaa bytes)
-HASHB32_4099xAA_BYTES = "SXBV2Q0G5PZNCC60ED9AXGBZ"
-
-_SKIP_MSG = "Needs to have conformance work done"
+# Vectors here are hand-derived and confirmed against independent codecs.
+# scripts/audit-conformance-vectors.sh rederives the published set using only
+# external tools, with nothing from this implementation in the loop.
 
 REFERENCE_ENCODED_VECTORS = [
     (0, "NW9MKEFNZ6GTD8209QN3DQ69"),
