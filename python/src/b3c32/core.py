@@ -1,4 +1,3 @@
-import hashlib
 
 from blake3 import blake3
 
@@ -74,18 +73,23 @@ def _decode_crockford_b32(code: str) -> bytes:
     return accumulated_int.to_bytes(bit_count // 8, "big")
 
 
+_ = _decode_crockford_b32  # Shut up LSPs
+
+
 def hash_full_b32(data: bytes) -> str:
-    """Compute a BLAKE2b 120-bit hash and return as Crockford Base32 string.
+    """Compute the canonical shortcode for content.
+    Composes the certified units per the shared conformance contract:
+    unkeyed BLAKE3 at 120 bits on the 40-bit ladder,
+    encoded low-pad bitstream Crockford Base32.
+    Both halves are contract-strict; this function only wires them.
 
     Args:
         data: The bytes to hash.
 
     Returns:
-        A 24-character Crockford Base32 encoded string representing
-        the 120-bit BLAKE2b hash digest.
+        A 24-character canonical Crockford Base32 shortcode.
     """
-    digest = hashlib.blake2b(data, digest_size=15).digest()
-    return _encode_crockford_b32(digest)
+    return _encode_crockford_b32(_hash_digest(data))
 
 
 _TRANS_CROCKFORD_AMBIG = str.maketrans(

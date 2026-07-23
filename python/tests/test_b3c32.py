@@ -54,6 +54,23 @@ HASHB32_4099xAA_BYTES = "SXBV2Q0G5PZNCC60ED9AXGBZ"
 
 _SKIP_MSG = "Needs to have conformance work done"
 
+REFERENCE_ENCODED_VECTORS = [
+    (0, "NW9MKEFNZ6GTD8209QN3DQ69"),
+    (1023, "2088JW7EV8ZBJCNTNGA2HHX2"),
+    (1024, "88GMEEFGJPJ0DWZWGFFBH2BM"),
+    (1025, "T017HBJ7XCKV6KXESXKV9ZH6"),
+    (2049, "BX6Q5X0DF9FR5CAWMASE8JRX"),
+]
+
+CONVENIENCE_ENCODED_VECTORS = [
+    (b"Hello, World!\n", "C8SR6JYEF0BXP7J03F7EMAWB", "hello"),
+    (b"\x00\xff\r\n\x1a", "56V71DGBAMEA57K94KP1NKF8", "hard_bytes"),
+    (b"\xe2\x9c\x85", "2A9V46HDZYE86ESAZ71PZ8Y6", "check_emoji"),
+]
+CONVENIENCE_ENCODED_PYTEST = [
+    pytest.param(x[0], x[1], id=x[2]) for x in CONVENIENCE_ENCODED_VECTORS
+]
+
 
 def _exhaustive_small_inputs() -> list[bytes]:
     """Every byte string up to two bytes: empty, all 256 single bytes,
@@ -74,36 +91,50 @@ def _random_inputs(count: int = 2000, max_len: int = 64) -> tuple[int, list[byte
     return seed, [rng.randbytes(rng.randint(0, max_len)) for _ in range(count)]
 
 
-@pytest.mark.skip(_SKIP_MSG)
 class TestHashFullB32:
-    """Tests the depo.util.shortcode.hash_full_b32 function"""
+    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
+    Units are certified separately; composition proves wiring,
+    the ladder prefix relation, and the guard against off-ladder widths.
+    Frozen addresses are depo-derived and provisional until normpic convergence.
+    """
 
-    @pytest.mark.parametrize(
-        "data,expect",
-        [
-            (b"", HASHB32_EMPTY),
-            (b"Hello, World!", HASHB32_HELLO),
-            (b"\xff", HASHB32_1xFF_BYTES),
-            (b"\x00" * 5, HASHB32_5xZERO_BYTES),
-            (b"\x00" * 4099, HASHB32_4099xZERO_BYTES),
-            (b"\xaa" * 4099, HASHB32_4099xAA_BYTES),
-        ],
-        ids=["empty", "Hello", "0xFF", "0x00 * 5", "0x00 * 4099", "0xAA * 4099"],
-    )
-    def test_known_b32_hashes(self, data: bytes, expect: str):
-        """The hash/encode function must:
-        1. Encode to the correct known value for given input
-        2. Contain only Crockford base32 characters
-        3. Length is always 24 characters (24 * 5 bits = 120 bits)
-        4. Deterministic (same input always same output)
-        5. Different inputs produce different outputs
+    def _reference_input(self, input_len: int) -> bytes:
+        """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
+        return bytes(i % 251 for i in range(input_len))
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_wiring(self, data):
+        """Contract 4.9. hash_full_b32 composes _hash_digest and the encoder."""
+        assert hash_full_b32(data) == _encode_crockford_b32(_hash_digest(data))
+
+    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
+    def test_encoded_matches_frozen_set(self, input_len: int, expect: str):
+        """Contract 4.9. Reference-input encodings match the frozen set.
+        Certified: each derives from the pinned reference hex through certified encoder,
+        so it detects error, not just change.
         """
-        result = hash_full_b32(data)
-        assert result == expect  # (1)
-        assert set(result).issubset(CROCKFORD_ALPHABET)  # (2)
-        assert len(result) == 24  # (3)
-        assert hash_full_b32(data) == result  # (4)
-        assert hash_full_b32(data + b"x") != result  # (5)
+        assert hash_full_b32(self._reference_input(input_len)) == expect
+
+    @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
+    def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
+        """Convenience vectors, depo-derived. Documents byte-oriented input;
+        detects change only, not error."""
+        assert hash_full_b32(data) == expect
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_ladder_prefix(self, data: bytes):
+        """Contract 4.10. Encoding prefixes a wider aligned encoding."""
+        narrow = _encode_crockford_b32(blake3(data).digest(length=15))
+        wide = _encode_crockford_b32(blake3(data).digest(length=20))
+        assert wide.startswith(narrow), f"prefix broken on {data!r}"
+
+    def test_ladder_guard(self):
+        """Contract 4.11. Prefix holds when the narrow width is a 40-bit
+        multiple, breaks when it is not."""
+        data = b"\xff" * 20
+        wide = _encode_crockford_b32(data)
+        assert wide.startswith(_encode_crockford_b32(data[:15]))
+        assert not wide.startswith(_encode_crockford_b32(data[:16]))
 
 
 class TestCrockfordAlphabet:
