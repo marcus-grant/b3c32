@@ -280,6 +280,31 @@ class TestCrockfordEncode:
         # Verify excluded characters never appear
         assert not any(c in result for c in "ILOUilou")
 
+    @pytest.mark.parametrize("length,expect", PERIODIC_AA_VECTORS)
+    def test_periodic_aa(self, length: int, expect: str):
+        """Contract 4.6. 0xAA at each pad residue. Alternating symbols
+        catch ordering and transposition errors."""
+        assert _encode_crockford_b32(b"\xaa" * length) == expect
+
+    @pytest.mark.parametrize("length,expect", PERIODIC_FF_VECTORS)
+    def test_periodic_ff(self, length: int, expect: str):
+        """Contract 4.6. 0xFF at each pad residue. Uniform period, so it
+        confirms tail placement only and is blind to ordering."""
+        assert _encode_crockford_b32(b"\xff" * length) == expect
+
+    @pytest.mark.parametrize("length,expect", PERIODIC_ZERO_VECTORS)
+    def test_periodic_zero(self, length: int, expect: str):
+        """Contract 4.6. 0x00 at each pad residue. Tail-blind; certifies
+        length only, never pad behavior."""
+        assert _encode_crockford_b32(b"\x00" * length) == expect
+
+    def test_long_tiling_matches_literal_encode(self):
+        """Contract 4.6. A long 0xAA encode equals period-times-N plus
+        tail. The expression is a cross-check and failure localizer, not
+        the source of the expected value."""
+        literal = _encode_crockford_b32(b"\xaa" * 105)
+        assert literal == "NA" * 84
+
 
 class TestEncoderCrossLineage:
     """Shipped encoder agrees with an independent-lineage verifier.
@@ -472,6 +497,14 @@ class TestHashFullB32:
         assert wide.startswith(_encode_crockford_b32(data[:15]))
         assert not wide.startswith(_encode_crockford_b32(data[:16]))
 
+
+class TestCodecProperties:
+    """Contract 4.8. Property laws over generated inputs.
+
+    Hypothesis generates and shrinks, so a failure reports the minimal
+    input rather than whatever random draw hit it.
+    """
+
     @given(st.binary(max_size=256))
     def test_roundtrip(self, data: bytes):
         """decode(encode(x)) recovers x for any byte input."""
@@ -493,31 +526,6 @@ class TestHashFullB32:
         aligned = head[: len(head) // 5 * 5]
         prefix = _encode_crockford_b32(aligned)
         assert _encode_crockford_b32(aligned + tail).startswith(prefix)
-
-    @pytest.mark.parametrize("length,expect", PERIODIC_AA_VECTORS)
-    def test_periodic_aa(self, length: int, expect: str):
-        """Contract 4.6. 0xAA at each pad residue. Alternating symbols
-        catch ordering and transposition errors."""
-        assert _encode_crockford_b32(b"\xaa" * length) == expect
-
-    @pytest.mark.parametrize("length,expect", PERIODIC_FF_VECTORS)
-    def test_periodic_ff(self, length: int, expect: str):
-        """Contract 4.6. 0xFF at each pad residue. Uniform period, so it
-        confirms tail placement only and is blind to ordering."""
-        assert _encode_crockford_b32(b"\xff" * length) == expect
-
-    @pytest.mark.parametrize("length,expect", PERIODIC_ZERO_VECTORS)
-    def test_periodic_zero(self, length: int, expect: str):
-        """Contract 4.6. 0x00 at each pad residue. Tail-blind; certifies
-        length only, never pad behavior."""
-        assert _encode_crockford_b32(b"\x00" * length) == expect
-
-    def test_long_tiling_matches_literal_encode(self):
-        """Contract 4.6. A long 0xAA encode equals period-times-N plus
-        tail. The expression is a cross-check and failure localizer, not
-        the source of the expected value."""
-        literal = _encode_crockford_b32(b"\xaa" * 105)
-        assert literal == "NA" * 84
 
 
 class TestCanonicalizeCode:
