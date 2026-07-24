@@ -18,7 +18,7 @@ from blake3 import blake3
 from hypothesis import given
 from hypothesis import strategies as st
 
-from depo.util.shortcode import (
+from b3c32.core import (
     _CROCKFORD32,
     _HASH_DIGEST_LEN_BYTES,
     _decode_crockford_b32,
@@ -126,7 +126,8 @@ class TestHashDigest:
     modes and are not depo's scheme.
     """
 
-    VECTOR_FILE = Path(__file__).parent.parent / "vectors" / "blake3-1.8.5-93a431c.json"
+    # Blake3's own published vector file, pinned and vendored.
+    VECTOR_FILE = Path(__file__).parents[2] / "vectors" / "blake3-1.8.5-93a431c.json"
 
     def _load_blake3_cases(self) -> list[dict]:
         """Reference cases from the vendored pinned vector file."""
