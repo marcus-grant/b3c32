@@ -1,6 +1,6 @@
 # tests/util/test_shortcode.py
 """
-Tests for shortcode hashing and Crockford encoding.
+Tests for b3c32 hashing and Crockford encoding.
 Author: Marcus Grant
 Date: 2026-01-26
 Revisions: [2026-07-22]
@@ -18,15 +18,16 @@ from blake3 import blake3
 from hypothesis import given
 from hypothesis import strategies as st
 
-from b3c32.core import (
-    _CROCKFORD32,
-    _HASH_DIGEST_LEN_BYTES,
-    _decode_crockford_b32,
-    _encode_crockford_b32,
-    _hash_digest,
-    canonicalize_code,
-    hash_full_b32,
+from b3c32 import (
+    CoercionError,
+    UncertifiedWidthError,
+    coerce_crockford_b32,
+    decode_crockford_b32,
+    encode_crockford_b32,
+    hash_b32,
+    hash_digest,
 )
+from b3c32.core import _CERTIFIED_BITS, _CROCKFORD32
 
 # Vectors here are hand-derived and confirmed against independent codecs.
 # scripts/audit-conformance-vectors.sh rederives the published set using only
@@ -144,13 +145,12 @@ class TestHashDigest:
         for case in self._load_blake3_cases():
             msg = f"mismatch on input_len={case['input_len']}"
             expect = bytes.fromhex(case["hash"][:30])
-            assert _hash_digest(_reference_input(case["input_len"])) == expect, msg
+            assert hash_digest(_reference_input(case["input_len"]), 120) == expect, msg
 
     def test_digest_is_120_bits(self):
         """Digest width is 15 bytes. Local coverage, not a contract clause."""
-        assert _HASH_DIGEST_LEN_BYTES * 8 == 120
-        assert len(_hash_digest(b"")) == _HASH_DIGEST_LEN_BYTES
-        assert len(_hash_digest(b"x" * 1025)) == _HASH_DIGEST_LEN_BYTES
+        assert len(hash_digest(b"", 120)) == 15
+        assert len(hash_digest(b"x" * 1025, 120)) == 15
 
     def test_chunk_boundary_lengths(self):
         """Contract 4.1. Chunk boundaries the reference singles out."""
@@ -158,7 +158,7 @@ class TestHashDigest:
         cases = [c for c in self._load_blake3_cases() if c["input_len"] in boundaries]
         assert len(cases) == len(boundaries)
         for case in cases:
-            digest = _hash_digest(_reference_input(case["input_len"]))
+            digest = hash_digest(_reference_input(case["input_len"]), 120)
             msg = f"chunk boundary mismatch at input_len={case['input_len']}"
             assert digest == bytes.fromhex(case["hash"][:30]), msg
 
@@ -181,6 +181,25 @@ class TestHashDigest:
             short_output = blake3(data).digest(length=70)
             msg = f"shipped build prefix broken on {data!r}"
             assert long_output.startswith(short_output), msg
+
+
+class TestCertifiedWidthGate:
+    """The parametric API gates on the certified width set.
+    Consumer smoke tests depend on this gate surviving upgrades."""
+
+    @pytest.mark.parametrize(
+        "case",
+        [0, 42, 160],
+        ids=["degenerate_len", "arbitrary", "40-width_uncertified"],
+    )
+    def test_uncertified_width_raises(self, case: int) -> None:
+        """Any width outside the certified set raises UncertifiedWidthError."""
+        with pytest.raises(UncertifiedWidthError):
+            hash_digest(b"", case)
+
+    def test_certified_set_is_exactly_120(self) -> None:
+        """The certified set contains 120 and nothing else."""
+        assert _CERTIFIED_BITS == {120}
 
 
 class TestCrockfordAlphabet:
@@ -249,37 +268,37 @@ class TestCrockfordEncode:
     @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_known_encodings(self, data: bytes, expect: str):
         """Contract 4.7. Encoding matches hand-derived and draft values."""
-        assert _encode_crockford_b32(data) == expect
+        assert encode_crockford_b32(data) == expect
 
     def test_output_length(self):
         """Output length is ceil(input bits / 5). Local coverage."""
-        assert len(_encode_crockford_b32(b"\x00")) == 2  # 8 bits → 2 chars
-        assert len(_encode_crockford_b32(b"\x00" * 5)) == 8  # 40 bits → 8 chars
-        assert len(_encode_crockford_b32(b"\x00" * 15)) == 24  # 120 bits → 24 chars
+        assert len(encode_crockford_b32(b"\x00")) == 2  # 8 bits → 2 chars
+        assert len(encode_crockford_b32(b"\x00" * 5)) == 8  # 40 bits → 8 chars
+        assert len(encode_crockford_b32(b"\x00" * 15)) == 24  # 120 bits → 24 chars
 
     @pytest.mark.parametrize("length,expect", PERIODIC_AA_VECTORS)
     def test_periodic_aa(self, length: int, expect: str):
         """Contract 4.6. 0xAA at each pad residue. Alternating symbols
         catch ordering and transposition errors."""
-        assert _encode_crockford_b32(b"\xaa" * length) == expect
+        assert encode_crockford_b32(b"\xaa" * length) == expect
 
     @pytest.mark.parametrize("length,expect", PERIODIC_FF_VECTORS)
     def test_periodic_ff(self, length: int, expect: str):
         """Contract 4.6. 0xFF at each pad residue. Uniform period, so it
         confirms tail placement only and is blind to ordering."""
-        assert _encode_crockford_b32(b"\xff" * length) == expect
+        assert encode_crockford_b32(b"\xff" * length) == expect
 
     @pytest.mark.parametrize("length,expect", PERIODIC_ZERO_VECTORS)
     def test_periodic_zero(self, length: int, expect: str):
         """Contract 4.6. 0x00 at each pad residue. Tail-blind; certifies
         length only, never pad behavior."""
-        assert _encode_crockford_b32(b"\x00" * length) == expect
+        assert encode_crockford_b32(b"\x00" * length) == expect
 
     def test_long_tiling_matches_literal_encode(self):
         """Contract 4.6. A long 0xAA encode equals period-times-N plus
         tail. The expression is a cross-check and failure localizer, not
         the source of the expected value."""
-        literal = _encode_crockford_b32(b"\xaa" * 105)
+        literal = encode_crockford_b32(b"\xaa" * 105)
         assert literal == "NA" * 84
 
 
@@ -301,7 +320,7 @@ class TestEncoderCrossLineage:
 
         Uses stdlib base64.b32encode (RFC 4648), strips '=' padding, and
         translates the RFC 4648 alphabet to Crockford. Shares no code with
-        _encode_crockford_b32; used only in tests as the cross-lineage
+        encode_crockford_b32; used only in tests as the cross-lineage
         oracle.
         """
         _CROCK_TRANS = str.maketrans(self._RFC4648_B32, _CROCKFORD32)
@@ -319,7 +338,7 @@ class TestEncoderCrossLineage:
         here means the verifier itself is wrong, not the encoder.
         """
         _ = expect  # To shut up LSP
-        assert _encode_crockford_b32(data) == self._crock32_verifier(data)
+        assert encode_crockford_b32(data) == self._crock32_verifier(data)
 
     def test_agrees_exhaustive_small(self):
         """Shipped encoder and verifier agree on every input up to two
@@ -331,12 +350,53 @@ class TestEncoderCrossLineage:
         """
         for data in _exhaustive_small_inputs():
             msg = f"mismatch on {data!r}"
-            assert _encode_crockford_b32(data) == self._crock32_verifier(data), msg
+            assert encode_crockford_b32(data) == self._crock32_verifier(data), msg
 
     @given(st.binary(max_size=256))
     def test_agrees_on_generated_inputs(self, data: bytes):
         """Shipped encoder and verifier agree on generated inputs."""
-        assert _encode_crockford_b32(data) == self._crock32_verifier(data)
+        assert encode_crockford_b32(data) == self._crock32_verifier(data)
+
+
+class TestHashB32:
+    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
+    Units are certified separately; composition proves wiring,
+    the ladder prefix relation, and the guard against off-ladder widths.
+    Frozen addresses are depo-derived and provisional until normpic convergence.
+    """
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_wiring(self, data):
+        """Contract 4.9. hash_b32 composes hash_digest and the encoder."""
+        assert hash_b32(data, 120) == encode_crockford_b32(hash_digest(data, 120))
+
+    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
+    def test_encoded_matches_frozen_set(self, input_len: int, expect: str):
+        """Contract 4.9. Reference-input encodings match the frozen set.
+        Certified: each derives from the pinned reference hex through certified encoder,
+        so it detects error, not just change."""
+        assert hash_b32(_reference_input(input_len), 120) == expect
+
+    @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
+    def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
+        """Convenience vectors, depo-derived. Documents byte-oriented input;
+        detects change only, not error."""
+        assert hash_b32(data, 120) == expect
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_prefix_holds_across_aligned_widths(self, data: bytes):
+        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
+        narrow = encode_crockford_b32(blake3(data).digest(length=15))
+        wide = encode_crockford_b32(blake3(data).digest(length=20))
+        assert wide.startswith(narrow), f"prefix broken on {data!r}"
+
+    def test_prefix_requires_aligned_width(self):
+        """Contract 4.11. Prefix holds when the narrow width is a 40-bit
+        multiple, breaks when it is not."""
+        data = b"\xff" * 20
+        wide = encode_crockford_b32(data)
+        assert wide.startswith(encode_crockford_b32(data[:15]))
+        assert not wide.startswith(encode_crockford_b32(data[:16]))
 
 
 class TestDecodeCrockfordB32:
@@ -348,41 +408,41 @@ class TestDecodeCrockfordB32:
     encoder introduced to fill a symbol, not input. This makes decode
     recover the original bytes exactly, so the known vectors invert.
     Input must already be canonical; leniency is composed by passing
-    through canonicalize_code first.
+    through coerce_crockford_b32 first.
     """
 
     @pytest.mark.parametrize("code,expect", KNOWN_DECODE_PYTEST)
     def test_inverts_known_vectors(self, code, expect):
         """Every known encode vector decodes back to its original bytes."""
-        assert _decode_crockford_b32(code) == expect
+        assert decode_crockford_b32(code) == expect
 
     @pytest.mark.parametrize("bad", ["I", "L", "O", "U"])
     def test_rejects_ambiguous_letters(self, bad: str):
-        """Visually ambiguous symbols rejected. Coerce to 0,1 with canonicalize_code.
+        """Visually ambiguous symbols rejected. Coerce to 0,1 with coerce_crockford_b32.
         So strict decode rejecting them is what keeps the layers distinct."""
         with pytest.raises(ValueError):
-            _decode_crockford_b32(f"ABC{bad}123")
+            decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["a", "b", "z"])
     def test_rejects_lowercase(self, bad: str):
-        """Strict decode is case-sensitive; canonicalize first."""
+        """Strict decode is case-sensitive; coerce first."""
         with pytest.raises(ValueError):
-            _decode_crockford_b32(f"ABC{bad}123")
+            decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["*", "~", "$", "=", "U"])
     def test_rejects_checksum_symbols(self, bad: str):
         """Mod-37 check symbols are reserved, not data.
         Strict decode doesnt checksum; rejects rather than treating them as payload."""
         with pytest.raises(ValueError):
-            _decode_crockford_b32(f"ABC{bad}123")
+            decode_crockford_b32(f"ABC{bad}123")
 
     @pytest.mark.parametrize("bad", ["!", "-", " ", ":", "_", "@", "\n"])
     def test_rejects_other_non_alphabet(self, bad: str):
         """Other symbols outside the alphabet raises.
-        Separators & whitespaceincluded because canonicalize_code strips them.
+        Separators & whitespace included because coerce_crockford_b32 strips them.
         Their rejection here confirms strict decode does no normalization."""
         with pytest.raises(ValueError):
-            _decode_crockford_b32(f"ABC{bad}123")
+            decode_crockford_b32(f"ABC{bad}123")
 
 
 class TestCodecRoundtrip:
@@ -402,55 +462,13 @@ class TestCodecRoundtrip:
         """Every input up to two bytes survives encode then decode."""
         for data in _exhaustive_small_inputs():
             msg = f"mismatch on {data!r}"
-            assert _decode_crockford_b32(_encode_crockford_b32(data)) == data, msg
+            assert decode_crockford_b32(encode_crockford_b32(data)) == data, msg
 
     @pytest.mark.parametrize("data,expect", KNOWN_ENCODE_PYTEST)
     def test_roundtrips_known_vectors(self, data: bytes, expect: str):
         """Every known vector's original bytes survive the round trip."""
         _ = expect  # To shut up LSP
-        assert _decode_crockford_b32(_encode_crockford_b32(data)) == data
-
-
-class TestHashFullB32:
-    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
-    Units are certified separately; composition proves wiring,
-    the ladder prefix relation, and the guard against off-ladder widths.
-    Frozen addresses are depo-derived and provisional until normpic convergence.
-    """
-
-    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
-    def test_wiring(self, data):
-        """Contract 4.9. hash_full_b32 composes _hash_digest and the encoder."""
-        assert hash_full_b32(data) == _encode_crockford_b32(_hash_digest(data))
-
-    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
-    def test_encoded_matches_frozen_set(self, input_len: int, expect: str):
-        """Contract 4.9. Reference-input encodings match the frozen set.
-        Certified: each derives from the pinned reference hex through certified encoder,
-        so it detects error, not just change.
-        """
-        assert hash_full_b32(_reference_input(input_len)) == expect
-
-    @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
-    def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
-        """Convenience vectors, depo-derived. Documents byte-oriented input;
-        detects change only, not error."""
-        assert hash_full_b32(data) == expect
-
-    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
-    def test_prefix_holds_across_aligned_widths(self, data: bytes):
-        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
-        narrow = _encode_crockford_b32(blake3(data).digest(length=15))
-        wide = _encode_crockford_b32(blake3(data).digest(length=20))
-        assert wide.startswith(narrow), f"prefix broken on {data!r}"
-
-    def test_prefix_requires_aligned_width(self):
-        """Contract 4.11. Prefix holds when the narrow width is a 40-bit
-        multiple, breaks when it is not."""
-        data = b"\xff" * 20
-        wide = _encode_crockford_b32(data)
-        assert wide.startswith(_encode_crockford_b32(data[:15]))
-        assert not wide.startswith(_encode_crockford_b32(data[:16]))
+        assert decode_crockford_b32(encode_crockford_b32(data)) == data
 
 
 class TestCodecProperties:
@@ -463,27 +481,27 @@ class TestCodecProperties:
     @given(st.binary(max_size=256))
     def test_roundtrip(self, data: bytes):
         """decode(encode(x)) recovers x for any byte input."""
-        assert _decode_crockford_b32(_encode_crockford_b32(data)) == data
+        assert decode_crockford_b32(encode_crockford_b32(data)) == data
 
     @given(st.binary(max_size=256))
     def test_alphabet_closure(self, data: bytes):
         """Encoded output contains only alphabet symbols."""
-        assert set(_encode_crockford_b32(data)) <= set(_CROCKFORD32)
+        assert set(encode_crockford_b32(data)) <= set(_CROCKFORD32)
 
     @given(st.binary(max_size=256))
     def test_length_invariant(self, data: bytes):
         """Output length is ceil(input bits / 5)."""
-        assert len(_encode_crockford_b32(data)) == -(-len(data) * 8 // 5)
+        assert len(encode_crockford_b32(data)) == -(-len(data) * 8 // 5)
 
     @given(st.binary(min_size=5, max_size=256), st.binary(max_size=256))
     def test_prefix_law(self, head: bytes, tail: bytes):
         """Encoding a 40-bit-aligned prefix prefixes the whole encoding."""
         aligned = head[: len(head) // 5 * 5]
-        prefix = _encode_crockford_b32(aligned)
-        assert _encode_crockford_b32(aligned + tail).startswith(prefix)
+        prefix = encode_crockford_b32(aligned)
+        assert encode_crockford_b32(aligned + tail).startswith(prefix)
 
 
-class TestCanonicalizeCode:
+class TestCoerceCrockfordB32:
     """Contract section 5, the lenient side. Normalizes user-typed input
     toward canonical form.
 
@@ -496,7 +514,7 @@ class TestCanonicalizeCode:
 
     def test_uppercase_valid_input(self):
         """Valid lowercase input should be upper cased"""
-        assert canonicalize_code("abcd1234") == "ABCD1234"
+        assert coerce_crockford_b32("abcd1234") == "ABCD1234"
 
     @pytest.mark.parametrize(
         "code,expect",
@@ -508,7 +526,7 @@ class TestCanonicalizeCode:
     )
     def test_ambiguous_char_mappings(self, code: str, expect: str):
         """Ambiguous characters O, I, L should map to 0, 1, 1."""
-        assert canonicalize_code(code) == expect
+        assert coerce_crockford_b32(code) == expect
 
     @pytest.mark.parametrize(
         "code,expect",
@@ -521,7 +539,7 @@ class TestCanonicalizeCode:
     )
     def test_separators_removed(self, code: str, expect: str):
         """Hyphens and spaces should be stripped for readability."""
-        assert canonicalize_code(code) == expect
+        assert coerce_crockford_b32(code) == expect
 
     @pytest.mark.parametrize(
         "code",
@@ -533,9 +551,9 @@ class TestCanonicalizeCode:
         ],
     )
     def test_rejects_invalid_chars(self, code: str):
-        """Invalid characters should raise ValueError."""
-        with pytest.raises(ValueError):
-            canonicalize_code(code)
+        """Invalid characters should raise CoercionError."""
+        with pytest.raises(CoercionError):
+            coerce_crockford_b32(code)
 
     @pytest.mark.parametrize(
         "code",
@@ -549,9 +567,9 @@ class TestCanonicalizeCode:
         ],
     )
     def test_rejects_empty_after_norm(self, code: str):
-        """Empty string after normalization should raise ValueError."""
-        with pytest.raises(ValueError):
-            canonicalize_code(code)
+        """Empty string after normalization should raise CoercionError."""
+        with pytest.raises(CoercionError):
+            coerce_crockford_b32(code)
 
     @pytest.mark.parametrize(
         "code",
@@ -564,6 +582,6 @@ class TestCanonicalizeCode:
     )
     def test_idempotent(self, code: str):
         """Canonical twice should produce same result as once"""
-        once = canonicalize_code(code)
-        twice = canonicalize_code(once)
+        once = coerce_crockford_b32(code)
+        twice = coerce_crockford_b32(once)
         assert once == twice

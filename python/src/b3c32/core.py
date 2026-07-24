@@ -1,10 +1,42 @@
+# python/src/b3c32/core.py
+"""
+BLAKE3 hashing and Crockford Base32 codec for b3c32 codes.
+Author: Marcus Grant
+Date: 2026-01-26
+Revisions: [2026-07-24]
+License: Apache-2.0
+"""
+
 from blake3 import blake3
 
-_HASH_DIGEST_LEN_BYTES = 15
+from b3c32.errors import CoercionError, UncertifiedWidthError
+
+_CERTIFIED_BITS = frozenset({120})
 _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_TRANS_CROCKFORD_AMBIG = str.maketrans({"O": "0", "I": "1", "L": "1"})
 
 
-def _encode_crockford_b32(data: bytes) -> str:
+def hash_digest(data: bytes, bits: int) -> bytes:
+    """Compute the content digest at a certified width.
+
+    Unkeyed BLAKE3 XOF sliced to bits, gated on the certified set.
+
+    Args:
+        data: The bytes to hash.
+        bits: Digest width; must be in the certified set.
+
+    Returns:
+        The digest of bits // 8 bytes.
+
+    Raises:
+        UncertifiedWidthError: bits is not a certified width.
+    """
+    if bits not in _CERTIFIED_BITS:
+        raise UncertifiedWidthError(bits)
+    return blake3(data).digest(length=bits // 8)
+
+
+def encode_crockford_b32(data: bytes) -> str:
     """Encode bytes as Crockford Base32, low-pad bitstream.
 
     Bits are taken MSB-first as a single stream, grouped into 5-bit
@@ -28,23 +60,25 @@ def _encode_crockford_b32(data: bytes) -> str:
     return "".join(symbols)
 
 
-def _hash_digest(data: bytes) -> bytes:
-    """Compute the content digest for a shortcode.
+def hash_b32(data: bytes, bits: int) -> str:
+    """Compute the canonical code at a certified width.
 
-    Unkeyed BLAKE3, sliced to 120 bits (15 bytes) on the 40-bit ladder.
-    Unkeyed is load-bearing: keying would make identical content produce
-    different addresses, defeating content-addressing.
+    Composes hash_digest and the Crockford encoder.
 
     Args:
         data: The bytes to hash.
+        bits: Digest width; must be in the certified set.
 
     Returns:
-        The 15-byte digest.
+        Crockford Base32 code of bits // 5 characters.
+
+    Raises:
+        UncertifiedWidthError: bits is not a certified width.
     """
-    return blake3(data).digest(length=_HASH_DIGEST_LEN_BYTES)
+    return encode_crockford_b32(hash_digest(data, bits))
 
 
-def _decode_crockford_b32(code: str) -> bytes:
+def decode_crockford_b32(code: str) -> bytes:
     """Decode canonical Crockford Base32 to bytes.
 
     Symbols are taken MSB-first in 5-bit groups. Trailing bits that do
@@ -72,36 +106,8 @@ def _decode_crockford_b32(code: str) -> bytes:
     return accumulated_int.to_bytes(bit_count // 8, "big")
 
 
-_ = _decode_crockford_b32  # Shut up LSPs
-
-
-def hash_full_b32(data: bytes) -> str:
-    """Compute the canonical shortcode for content.
-    Composes the certified units per the shared conformance contract:
-    unkeyed BLAKE3 at 120 bits on the 40-bit ladder,
-    encoded low-pad bitstream Crockford Base32.
-    Both halves are contract-strict; this function only wires them.
-
-    Args:
-        data: The bytes to hash.
-
-    Returns:
-        A 24-character canonical Crockford Base32 shortcode.
-    """
-    return _encode_crockford_b32(_hash_digest(data))
-
-
-_TRANS_CROCKFORD_AMBIG = str.maketrans(
-    {
-        "O": "0",
-        "I": "1",
-        "L": "1",
-    }
-)
-
-
-def canonicalize_code(code: str) -> str:
-    """Canonicalize user-supplied code for DB lookup.
+def coerce_crockford_b32(code: str) -> str:
+    """Coerce user-supplied code for non-strict decodes/lookups.
 
     Args:
         code: User-supplied code string.
@@ -110,16 +116,16 @@ def canonicalize_code(code: str) -> str:
         Canonical uppercase string with ambiguous chars normalized.
 
     Raises:
-        ValueError: If code is empty or contains invalid characters.
+        CoercionError: If code is empty or contains invalid characters.
     """
     s = code.strip().upper()
     s = s.replace("-", "").replace(" ", "")
     s = s.translate(_TRANS_CROCKFORD_AMBIG)
 
     if not s:
-        raise ValueError("Code cannot be empty")
+        raise CoercionError()
 
     for ch in s:
         if ch not in _CROCKFORD32:
-            raise ValueError(f"Invalid character in code: {ch}")
+            raise CoercionError(ch)
     return s
