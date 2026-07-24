@@ -178,9 +178,12 @@ between them.
 
 `scripts/audit-conformance-vectors.sh` rederives every published vector
 using only external tools: b3sum for digests, coreutils basenc for the
-bit-packing, tr for the alphabet remap. Nothing from the certified implementation
-is in the loop, so agreement is cross-substrate rather than cross-lineage
-within one runtime.
+bit-packing, tr for the alphabet remap. Nothing from the certified implementation's code is in the loop. The
+encoding legs are cross-substrate; the digest leg shares blake3's Rust
+core with the python binding, so it is code-independent only.
+Reference-input digests are separately certified by the pinned file;
+for convenience vectors the digest leg confirms binding-level wiring,
+not the core. The b3sum version is pinned and asserted by the script.
 
 Every encoder vector and all five reference encodings were additionally
 confirmed by hand against two independent web codecs during derivation. Only

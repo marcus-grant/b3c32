@@ -2,9 +2,16 @@
 # scripts/audit-conformance-vectors.sh
 #
 # Independently derive the published conformance vectors using only external
-# tools, and report any disagreement. Nothing from depo's implementation is in
-# the loop: b3sum produces digests, coreutils basenc produces the bit-packing,
-# and tr remaps the base32hex alphabet to Crockford.
+# tools, and report any disagreement. Nothing from the certified
+# implementation's code is in the loop: b3sum produces digests, coreutils
+# basenc produces the bit-packing, and tr remaps the base32hex alphabet to
+# Crockford.
+#
+# Caveat: b3sum binds the same Rust core as the python blake3 binding, so
+# the digest leg is code-independent but not substrate-independent.
+# Reference-input digests are separately certified by the pinned reference
+# file; for convenience vectors this leg confirms binding-level wiring
+# only. The encoding legs, basenc and tr, are genuinely foreign lineage.
 #
 # Usage: scripts/audit-conformance-vectors.sh [vector-file]
 #
@@ -28,6 +35,20 @@ need b3sum "install with: apt install b3sum"
 need basenc "part of coreutils: apt install coreutils"
 need jq "install with: apt install jq"
 need xxd "part of vim-common: apt install vim-common"
+
+B3SUM_PIN="1.8.2"
+
+b3sum_version="$(b3sum --version | cut -d' ' -f2)"
+if [[ "$b3sum_version" != "$B3SUM_PIN" ]]; then
+  msg="b3sum $b3sum_version does not match audit pin $B3SUM_PIN"
+  if [[ "${B3C32_AUDIT_ALLOW_VERSION_DRIFT:-0}" == "1" ]]; then
+    echo "warning: $msg" >&2
+  else
+    echo "$msg" >&2
+    echo "  set B3C32_AUDIT_ALLOW_VERSION_DRIFT=1 to run anyway" >&2
+    exit 1
+  fi
+fi
 
 [[ -r "$VECTORS" ]] || {
   echo "cannot read vector file: $VECTORS" >&2
@@ -101,4 +122,3 @@ if ((fails > 0)); then
   exit 1
 fi
 echo "$checked checked, all agree"
-
