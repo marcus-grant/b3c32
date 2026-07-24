@@ -11,8 +11,9 @@ from blake3 import blake3
 
 from b3c32.errors import UncertifiedWidthError
 
-_CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _CERTIFIED_BITS = frozenset({120})
+_CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_TRANS_CROCKFORD_AMBIG = str.maketrans({"O": "0", "I": "1", "L": "1"})
 
 
 def hash_digest(data: bytes, bits: int) -> bytes:
@@ -33,24 +34,6 @@ def hash_digest(data: bytes, bits: int) -> bytes:
     if bits not in _CERTIFIED_BITS:
         raise UncertifiedWidthError(bits)
     return blake3(data).digest(length=bits // 8)
-
-
-def hash_b32(data: bytes, bits: int) -> str:
-    """Compute the canonical code at a certified width.
-
-    Composes hash_digest and the Crockford encoder.
-
-    Args:
-        data: The bytes to hash.
-        bits: Digest width; must be in the certified set.
-
-    Returns:
-        Crockford Base32 code of bits // 5 characters.
-
-    Raises:
-        UncertifiedWidthError: bits is not a certified width.
-    """
-    return encode_crockford_b32(hash_digest(data, bits))
 
 
 def encode_crockford_b32(data: bytes) -> str:
@@ -75,6 +58,24 @@ def encode_crockford_b32(data: bytes) -> str:
         symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
         symbols.append(_CROCKFORD32[symbol_num])
     return "".join(symbols)
+
+
+def hash_b32(data: bytes, bits: int) -> str:
+    """Compute the canonical code at a certified width.
+
+    Composes hash_digest and the Crockford encoder.
+
+    Args:
+        data: The bytes to hash.
+        bits: Digest width; must be in the certified set.
+
+    Returns:
+        Crockford Base32 code of bits // 5 characters.
+
+    Raises:
+        UncertifiedWidthError: bits is not a certified width.
+    """
+    return encode_crockford_b32(hash_digest(data, bits))
 
 
 def decode_crockford_b32(code: str) -> bytes:
@@ -103,15 +104,6 @@ def decode_crockford_b32(code: str) -> bytes:
     # Trailing bits past the last whole byte are encoder pad, so drop them
     accumulated_int >>= bit_count % 8
     return accumulated_int.to_bytes(bit_count // 8, "big")
-
-
-_TRANS_CROCKFORD_AMBIG = str.maketrans(
-    {
-        "O": "0",
-        "I": "1",
-        "L": "1",
-    }
-)
 
 
 def coerce_crockford_b32(code: str) -> str:
