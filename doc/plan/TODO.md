@@ -172,3 +172,16 @@ Clarity edits settled in discussion, riding with the fixes above.
 - Width section rewrite to certified-tier language,
   including retiring the off-ladder term,
   rides wherever the certified-width gate lands
+
+## Publish sequence
+
+MVP finale.
+The tag v0.1.0 is cut and published only when every entry above is resolved.
+
+- Metadata polish: readme as long description, classifiers, license file
+- PyPI trusted publisher wired to GitHub Actions,
+  publishing on tags only
+- Cut v0.1.0, first published tag,
+  claiming the name at the moment the artifact deserves it
+- Consumers may pin git tags before this;
+  PyPI is the post-MVP consumption path
