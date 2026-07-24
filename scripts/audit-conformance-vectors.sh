@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-VECTORS="${1:-tests/vectors/depo-conformance.json}"
+VECTORS="${1:-vectors/b3c32-conformance.json}"
 
 need() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -101,3 +101,4 @@ if ((fails > 0)); then
   exit 1
 fi
 echo "$checked checked, all agree"
+

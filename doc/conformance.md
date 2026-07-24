@@ -1,12 +1,12 @@
 # Conformance
 
-depo's content addresses are part of a scheme shared with sibling projects.
-This document is depo's normative statement of that scheme and of how an
-implementation is proven to conform. It mirrors the ratified cross-project
-contract; where implementation and this document conflict, this document
-wins. The scheme itself (how depo derives and stores codes) is described in
-[shortcodes](./shortcodes.md); this document covers what must be proven and
-where each expected value comes from.
+b3c32 is a content addressing scheme shared by multiple consumer
+projects. This document is the normative statement of that scheme and of
+how an implementation is proven to conform. Where an implementation and
+this document conflict, this document wins. How each consumer derives,
+stores, and resolves codes is described in that consumer's own
+documentation; this document covers what must be proven and where each
+expected value comes from.
 
 ## The scheme
 
@@ -24,7 +24,8 @@ Power-of-two widths (64, 128, 256) are off-ladder and break prefixing; all
 canonical and prefix lengths are multiples of 40 bits. Width is therefore
 self-evident from code length and is never stored: exact for canonical
 codes, and within 4 bits for an arbitrary foreign code, which prefix
-resolution tolerates since depo resolves on prefixes, not exact digests.
+resolution tolerates since consumers resolve on prefixes, not exact
+digests.
 
 ## The governing rule
 
@@ -36,12 +37,12 @@ where each value comes from and what independent thing certifies it.
 ## Oracle pins
 
 blake3 output is not hand-derivable, so the only trusted source is the
-official BLAKE3 reference test vectors at a pinned commit (BLAKE3-team/BLAKE3,
-test_vectors/test_vectors.json, tag 1.8.5, commit 93a431c78a52..., SHA-256
-dcb91ea8...). depo never computes a blake3 value to certify against; it lifts
+official BLAKE3 reference test vectors at a pinned commit (`BLAKE3-team/BLAKE3`,
+`test_vectors/test_vectors.json`, tag 1.8.5, commit `93a431c78a52...`, SHA-256
+`dcb91ea8...`). b3c32 never computes a blake3 value to certify against; it lifts
 hex from the pinned file. The commit pins provenance; the file hash lets a
 regenerator confirm the exact bytes before generating, so a bad fetch fails
-loud. depo ratifies these pins by independently fetching the file and
+loud. Each project ratifies these pins by independently fetching the file and
 reproducing the hash, not by accepting the recorded value.
 
 There is no Crockford reference-vector file, so encoding is sourced four
@@ -126,21 +127,20 @@ file as infallible.
 ## Decoder contract
 
 The strict core rejects anything outside the canonical alphabet, including
-U, O, I, L, and depo ships it as `_decode_crockford_b32`. U is not an
+U, O, I, L, shipped as `decode_crockford_b32`. U is not an
 ambiguity coercion in the class of O, I, L: those are excluded for visual
 ambiguity and are invalid in both the data alphabet and the checksum set, so
 coercing them is unconditionally safe, whereas U was dropped to reach 32
 characters (a vowel, to avoid forming words) and then reserved with four
 non-alphanumerics as the optional mod-37 checksum symbols, so U is
-meaningful (value 36) in a checksummed string. `canonicalize_code`, depo's
-lenient lookup path, therefore rejects U as well: coercing it to V requires
+meaningful (value 36) in a checksummed string. `coerce_crockford_b32`, the
+lenient companion, therefore rejects U as well: coercing it to V requires
 an explicit non-checksum declaration that no caller can yet make. A later
-lenient wrapper with caller-declared flags would coerce O to 0 and I and L
+flag-extended form would coerce O to 0 and I and L
 to 1 unconditionally, and U to V only when both lenience is on and the input
 is declared non-checksum; U is never coerced by inference. Lenient decode
 never emits a stored value; it funnels human input toward the one canonical
-form, so it cannot cause dialect drift. Details of depo's canonicalization
-are in [shortcodes](./shortcodes.md).
+form, so it cannot cause dialect drift.
 
 Decode discards trailing bits that do not complete a byte rather than
 padding up to one. Those bits are pad the encoder introduced to fill a
@@ -148,17 +148,17 @@ symbol, never input, so discarding them recovers the message rather than the
 transport artifact. This makes `decode(encode(x))` hold for every byte
 input, where padding up would fail for every input whose bit length is not a
 byte multiple. The theoretical ambiguity it accepts, a code whose final
-partial symbol carried real bits, is unreachable for codes depo produces
+partial symbol carried real bits, is unreachable for codes this scheme produces
 since they all originate from the encoder.
 
 ## Verification artifacts
 
 The pinned reference vectors are vendored at
-`tests/vectors/blake3-1.8.5-93a431c.json`, and the suite asserts the file's
+`vectors/blake3-1.8.5-93a431c.json`, and the suite asserts the file's
 SHA-256 against the recorded pin so a swapped or corrupted file fails loud
 rather than certifying against wrong values.
 
-depo's own vectors are published at `tests/vectors/depo-conformance.json`,
+The scheme's own vectors are published at `vectors/b3c32-conformance.json`,
 generated by `scripts/generate-conformance-vectors.py`. The generator holds
 every hand-derived value as a literal and asserts the implementation
 reproduces each before emitting; those literals are a deliberate second copy
@@ -167,14 +167,14 @@ between them.
 
 `scripts/audit-conformance-vectors.sh` rederives every published vector
 using only external tools: b3sum for digests, coreutils basenc for the
-bit-packing, tr for the alphabet remap. Nothing from depo's implementation
+bit-packing, tr for the alphabet remap. Nothing from the certified implementation
 is in the loop, so agreement is cross-substrate rather than cross-lineage
 within one runtime.
 
 Every encoder vector and all five reference encodings were additionally
 confirmed by hand against two independent web codecs during derivation. Only
-the convenience vectors rest on depo's implementation alone; they detect
-change, not error, and are labelled as such.
+the convenience vectors rest on the reference implementation alone;
+they detect change, not error, and are labelled as such.
 
 ## Wrong-code resolution
 
@@ -205,4 +205,3 @@ to the reference file, the draft, and the runtimes, up to the coverage of
 the sampled and exhaustive classes. The contract is final when the
 independent per-repo derivations converge, and reopens if a better proof or
 an error is found.
-
