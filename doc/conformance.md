@@ -76,12 +76,23 @@ and a wrong model fail differently, so they do not fail identically at once.
 The hasher is proven three ways. Hard-shape vectors: reference hex at chunk
 boundaries (1023, 1024, 1025) and multi-chunk sizes, matched by the shipped
 hasher reading the frozen file, never calling its own hasher for the
-expected value. Digest XOF prefix: one reference extended output sliced at a
-short and a long length, asserting the short is a true byte-prefix of the
-long, with the long length crossing blake3's 64-byte output-block boundary,
-since within one block a broken XOF looks correct. Runtime property:
+expected value. Full-output equality: the shipped hasher reproduces every byte
+of each reference extended output at its full width,
+so extended-output generation is certified,
+not only the sliced digest. Runtime property:
 separately, the shipped build's short output byte-prefixes its long output,
 proving the running binary has the property, not just the frozen values.
+
+Two structural axes of blake3 determine what these classes must cover.
+On the input side, blake3 splits input into 1024-byte chunks
+hashed as a tree,
+so the reference lengths 1023, 1024, 1025, and 2049 exercise
+one-chunk, both boundary edges, and multi-chunk tree logic.
+On the output side, the XOF emits 64-byte blocks:
+within one block a broken extended output
+and a correct one are indistinguishable,
+so assertions must compare bytes past 64,
+which the full-equality class does at the reference output's full width.
 
 The encoder is proven over a bounded domain rather than merely sampled.
 Bit-mechanics are a stateless streaming map, so every input up to a small
