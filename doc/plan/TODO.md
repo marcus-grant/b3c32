@@ -101,6 +101,9 @@ Byte-identical regeneration works only because nothing varies.
 
 Settled design:
 
+- Add a fourth convenience vector, 0xaa repeated 1025 times,
+  trivially constructible in any language,
+  crossing the blake3 chunk boundary through the full pipeline
 - Add pinned provenance fields:
   reference tag and commit, reference file SHA-256,
   generator identity, schema version
