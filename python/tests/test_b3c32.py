@@ -1,6 +1,6 @@
 # tests/util/test_shortcode.py
 """
-Tests for shortcode hashing and Crockford encoding.
+Tests for b3c32 hashing and Crockford encoding.
 Author: Marcus Grant
 Date: 2026-01-26
 Revisions: [2026-07-22]
@@ -19,14 +19,18 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from b3c32.core import (
+    _CERTIFIED_BITS,
     _CROCKFORD32,
     _HASH_DIGEST_LEN_BYTES,
     _decode_crockford_b32,
     _encode_crockford_b32,
     _hash_digest,
     canonicalize_code,
+    hash_b32,
+    hash_digest,
     hash_full_b32,
 )
+from b3c32.core import UncertifiedWidthError
 
 # Vectors here are hand-derived and confirmed against independent codecs.
 # scripts/audit-conformance-vectors.sh rederives the published set using only
@@ -181,6 +185,39 @@ class TestHashDigest:
             short_output = blake3(data).digest(length=70)
             msg = f"shipped build prefix broken on {data!r}"
             assert long_output.startswith(short_output), msg
+
+
+class TestCertifiedWidthGate:
+    """The parametric API gates on the certified width set.
+    Consumer smoke tests depend on this gate surviving upgrades."""
+
+    CASES = (b"", b"\x00", b"hello", b"x" * 1025)
+
+    def test_hash_digest_at_120_matches_legacy(self) -> None:
+        """hash_digest at 120 bits equals the extracted 15-byte digest."""
+        for data in self.CASES:
+            msg = f"Doesn't match digest of equivalent function with {data!r}"
+            assert hash_digest(data, 120) == _hash_digest(data), msg
+
+    def test_hash_b32_at_120_matches_legacy(self) -> None:
+        """hash_b32 at 120 bits equals the extracted composed code."""
+        for data in self.CASES:
+            msg = f"Doesn't match encoded digest of equivalent function with {data!r}"
+            assert hash_b32(data, 120) == hash_full_b32(data), msg
+
+    @pytest.mark.parametrize(
+        "case",
+        [0, 42, 160],
+        ids=["degenerate_len", "arbitrary", "40-width_uncertified"],
+    )
+    def test_uncertified_width_raises(self, case: int) -> None:
+        """Any width outside the certified set raises UncertifiedWidthError."""
+        with pytest.raises(UncertifiedWidthError):
+            hash_digest(b"", case)
+
+    def test_certified_set_is_exactly_120(self) -> None:
+        """The certified set contains 120 and nothing else."""
+        assert _CERTIFIED_BITS == {120}
 
 
 class TestCrockfordAlphabet:

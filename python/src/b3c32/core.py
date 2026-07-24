@@ -1,7 +1,57 @@
+# python/src/b3c32/core.py
+"""
+BLAKE3 hashing and Crockford Base32 codec for b3c32 codes.
+Author: Marcus Grant
+Date: 2026-01-26
+Revisions: [2026-07-24]
+License: Apache-2.0
+"""
+
 from blake3 import blake3
+
+from b3c32.errors import UncertifiedWidthError
 
 _HASH_DIGEST_LEN_BYTES = 15
 _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_CERTIFIED_BITS = frozenset({120})
+
+
+def hash_digest(data: bytes, bits: int) -> bytes:
+    """Compute the content digest at a certified width.
+
+    Unkeyed BLAKE3 XOF sliced to bits, gated on the certified set.
+
+    Args:
+        data: The bytes to hash.
+        bits: Digest width; must be in the certified set.
+
+    Returns:
+        The digest of bits // 8 bytes.
+
+    Raises:
+        UncertifiedWidthError: bits is not a certified width.
+    """
+    if bits not in _CERTIFIED_BITS:
+        raise UncertifiedWidthError(bits)
+    return blake3(data).digest(length=bits // 8)
+
+
+def hash_b32(data: bytes, bits: int) -> str:
+    """Compute the canonical code at a certified width.
+
+    Composes hash_digest and the Crockford encoder.
+
+    Args:
+        data: The bytes to hash.
+        bits: Digest width; must be in the certified set.
+
+    Returns:
+        Crockford Base32 code of bits // 5 characters.
+
+    Raises:
+        UncertifiedWidthError: bits is not a certified width.
+    """
+    return _encode_crockford_b32(hash_digest(data, bits))
 
 
 def _encode_crockford_b32(data: bytes) -> str:
