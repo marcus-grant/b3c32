@@ -9,7 +9,7 @@ License: Apache-2.0
 
 from blake3 import blake3
 
-from b3c32.errors import UncertifiedWidthError
+from b3c32.errors import CoercionError, UncertifiedWidthError
 
 _CERTIFIED_BITS = frozenset({120})
 _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
@@ -116,16 +116,16 @@ def coerce_crockford_b32(code: str) -> str:
         Canonical uppercase string with ambiguous chars normalized.
 
     Raises:
-        ValueError: If code is empty or contains invalid characters.
+        CoercionError: If code is empty or contains invalid characters.
     """
     s = code.strip().upper()
     s = s.replace("-", "").replace(" ", "")
     s = s.translate(_TRANS_CROCKFORD_AMBIG)
 
     if not s:
-        raise ValueError("Code cannot be empty")
+        raise CoercionError()
 
     for ch in s:
         if ch not in _CROCKFORD32:
-            raise ValueError(f"Invalid character in code: {ch}")
+            raise CoercionError(ch)
     return s

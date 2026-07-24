@@ -10,6 +10,7 @@ import b3c32
 
 _PUBLIC_INTERFACES = {
     "UncertifiedWidthError",
+    "CoercionError",
     "coerce_crockford_b32",
     "decode_crockford_b32",
     "encode_crockford_b32",

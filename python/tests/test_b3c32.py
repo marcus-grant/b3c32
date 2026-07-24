@@ -19,6 +19,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from b3c32 import (
+    CoercionError,
     UncertifiedWidthError,
     coerce_crockford_b32,
     decode_crockford_b32,
@@ -357,6 +358,47 @@ class TestEncoderCrossLineage:
         assert encode_crockford_b32(data) == self._crock32_verifier(data)
 
 
+class TestHashB32:
+    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
+    Units are certified separately; composition proves wiring,
+    the ladder prefix relation, and the guard against off-ladder widths.
+    Frozen addresses are depo-derived and provisional until normpic convergence.
+    """
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_wiring(self, data):
+        """Contract 4.9. hash_b32 composes hash_digest and the encoder."""
+        assert hash_b32(data, 120) == encode_crockford_b32(hash_digest(data, 120))
+
+    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
+    def test_encoded_matches_frozen_set(self, input_len: int, expect: str):
+        """Contract 4.9. Reference-input encodings match the frozen set.
+        Certified: each derives from the pinned reference hex through certified encoder,
+        so it detects error, not just change."""
+        assert hash_b32(_reference_input(input_len), 120) == expect
+
+    @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
+    def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
+        """Convenience vectors, depo-derived. Documents byte-oriented input;
+        detects change only, not error."""
+        assert hash_b32(data, 120) == expect
+
+    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
+    def test_prefix_holds_across_aligned_widths(self, data: bytes):
+        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
+        narrow = encode_crockford_b32(blake3(data).digest(length=15))
+        wide = encode_crockford_b32(blake3(data).digest(length=20))
+        assert wide.startswith(narrow), f"prefix broken on {data!r}"
+
+    def test_prefix_requires_aligned_width(self):
+        """Contract 4.11. Prefix holds when the narrow width is a 40-bit
+        multiple, breaks when it is not."""
+        data = b"\xff" * 20
+        wide = encode_crockford_b32(data)
+        assert wide.startswith(encode_crockford_b32(data[:15]))
+        assert not wide.startswith(encode_crockford_b32(data[:16]))
+
+
 class TestDecodeCrockfordB32:
     """Contract section 5, not a numbered assertion class. Strict decode
     is the inverse of the encoder.
@@ -427,47 +469,6 @@ class TestCodecRoundtrip:
         """Every known vector's original bytes survive the round trip."""
         _ = expect  # To shut up LSP
         assert decode_crockford_b32(encode_crockford_b32(data)) == data
-
-
-class TestHashB32:
-    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
-    Units are certified separately; composition proves wiring,
-    the ladder prefix relation, and the guard against off-ladder widths.
-    Frozen addresses are depo-derived and provisional until normpic convergence.
-    """
-
-    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
-    def test_wiring(self, data):
-        """Contract 4.9. hash_b32 composes hash_digest and the encoder."""
-        assert hash_b32(data, 120) == encode_crockford_b32(hash_digest(data, 120))
-
-    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
-    def test_encoded_matches_frozen_set(self, input_len: int, expect: str):
-        """Contract 4.9. Reference-input encodings match the frozen set.
-        Certified: each derives from the pinned reference hex through certified encoder,
-        so it detects error, not just change."""
-        assert hash_b32(_reference_input(input_len), 120) == expect
-
-    @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
-    def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
-        """Convenience vectors, depo-derived. Documents byte-oriented input;
-        detects change only, not error."""
-        assert hash_b32(data, 120) == expect
-
-    @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
-    def test_prefix_holds_across_aligned_widths(self, data: bytes):
-        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
-        narrow = encode_crockford_b32(blake3(data).digest(length=15))
-        wide = encode_crockford_b32(blake3(data).digest(length=20))
-        assert wide.startswith(narrow), f"prefix broken on {data!r}"
-
-    def test_prefix_requires_aligned_width(self):
-        """Contract 4.11. Prefix holds when the narrow width is a 40-bit
-        multiple, breaks when it is not."""
-        data = b"\xff" * 20
-        wide = encode_crockford_b32(data)
-        assert wide.startswith(encode_crockford_b32(data[:15]))
-        assert not wide.startswith(encode_crockford_b32(data[:16]))
 
 
 class TestCodecProperties:
@@ -550,8 +551,8 @@ class TestCoerceCrockfordB32:
         ],
     )
     def test_rejects_invalid_chars(self, code: str):
-        """Invalid characters should raise ValueError."""
-        with pytest.raises(ValueError):
+        """Invalid characters should raise CoercionError."""
+        with pytest.raises(CoercionError):
             coerce_crockford_b32(code)
 
     @pytest.mark.parametrize(
@@ -566,8 +567,8 @@ class TestCoerceCrockfordB32:
         ],
     )
     def test_rejects_empty_after_norm(self, code: str):
-        """Empty string after normalization should raise ValueError."""
-        with pytest.raises(ValueError):
+        """Empty string after normalization should raise CoercionError."""
+        with pytest.raises(CoercionError):
             coerce_crockford_b32(code)
 
     @pytest.mark.parametrize(

@@ -13,9 +13,10 @@ from b3c32.core import (
     hash_b32,
     hash_digest,
 )
-from b3c32.errors import UncertifiedWidthError
+from b3c32.errors import CoercionError, UncertifiedWidthError
 
 __all__ = [
+    "CoercionError",
     "UncertifiedWidthError",
     "coerce_crockford_b32",
     "decode_crockford_b32",

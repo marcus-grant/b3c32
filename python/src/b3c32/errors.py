@@ -17,3 +17,19 @@ class UncertifiedWidthError(ValueError):
     def __init__(self, bits: int) -> None:
         self.bits = bits
         super().__init__(f"digest width {bits} bits is not certified by contract")
+
+
+class CoercionError(ValueError):
+    """Raised when user-supplied code cannot be coerced to canonical form.
+
+    Carries the offending character, or None when the input was empty
+    after normalization.
+    """
+
+    def __init__(self, char: str | None = None) -> None:
+        self.char = char
+        if char is None:
+            msg = "cannot coerce input, empty after normalization"
+        else:
+            msg = f"cannot coerce input, offending char: {char}"
+        super().__init__(msg)
