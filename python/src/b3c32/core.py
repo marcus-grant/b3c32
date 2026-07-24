@@ -11,7 +11,6 @@ from blake3 import blake3
 
 from b3c32.errors import UncertifiedWidthError
 
-_HASH_DIGEST_LEN_BYTES = 15
 _CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _CERTIFIED_BITS = frozenset({120})
 
@@ -51,10 +50,10 @@ def hash_b32(data: bytes, bits: int) -> str:
     Raises:
         UncertifiedWidthError: bits is not a certified width.
     """
-    return _encode_crockford_b32(hash_digest(data, bits))
+    return encode_crockford_b32(hash_digest(data, bits))
 
 
-def _encode_crockford_b32(data: bytes) -> str:
+def encode_crockford_b32(data: bytes) -> str:
     """Encode bytes as Crockford Base32, low-pad bitstream.
 
     Bits are taken MSB-first as a single stream, grouped into 5-bit
@@ -78,23 +77,7 @@ def _encode_crockford_b32(data: bytes) -> str:
     return "".join(symbols)
 
 
-def _hash_digest(data: bytes) -> bytes:
-    """Compute the content digest for a shortcode.
-
-    Unkeyed BLAKE3, sliced to 120 bits (15 bytes) on the 40-bit ladder.
-    Unkeyed is load-bearing: keying would make identical content produce
-    different addresses, defeating content-addressing.
-
-    Args:
-        data: The bytes to hash.
-
-    Returns:
-        The 15-byte digest.
-    """
-    return blake3(data).digest(length=_HASH_DIGEST_LEN_BYTES)
-
-
-def _decode_crockford_b32(code: str) -> bytes:
+def decode_crockford_b32(code: str) -> bytes:
     """Decode canonical Crockford Base32 to bytes.
 
     Symbols are taken MSB-first in 5-bit groups. Trailing bits that do
@@ -122,25 +105,6 @@ def _decode_crockford_b32(code: str) -> bytes:
     return accumulated_int.to_bytes(bit_count // 8, "big")
 
 
-_ = _decode_crockford_b32  # Shut up LSPs
-
-
-def hash_full_b32(data: bytes) -> str:
-    """Compute the canonical shortcode for content.
-    Composes the certified units per the shared conformance contract:
-    unkeyed BLAKE3 at 120 bits on the 40-bit ladder,
-    encoded low-pad bitstream Crockford Base32.
-    Both halves are contract-strict; this function only wires them.
-
-    Args:
-        data: The bytes to hash.
-
-    Returns:
-        A 24-character canonical Crockford Base32 shortcode.
-    """
-    return _encode_crockford_b32(_hash_digest(data))
-
-
 _TRANS_CROCKFORD_AMBIG = str.maketrans(
     {
         "O": "0",
@@ -150,8 +114,8 @@ _TRANS_CROCKFORD_AMBIG = str.maketrans(
 )
 
 
-def canonicalize_code(code: str) -> str:
-    """Canonicalize user-supplied code for DB lookup.
+def coerce_crockford_b32(code: str) -> str:
+    """Coerce user-supplied code for non-strict decodes/lookups.
 
     Args:
         code: User-supplied code string.

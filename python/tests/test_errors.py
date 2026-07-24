@@ -23,6 +23,5 @@ class TestUncertifiedWidthError:
 
     def test_message_names_width(self) -> None:
         """The error message names the offending width."""
-        assert "42" in str(UncertifiedWidthError(42))
-        assert "certif" in str(UncertifiedWidthError(42))
-        assert "digest" in str(UncertifiedWidthError(42))
+        expect = ["42", "certif", "digest"]
+        assert all((s in str(UncertifiedWidthError(42)) for s in expect))
