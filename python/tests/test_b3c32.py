@@ -1,4 +1,4 @@
-# tests/util/test_shortcode.py
+# tests/util/test_b3c32.py
 """
 Tests for b3c32 hashing and Crockford encoding.
 Author: Marcus Grant
@@ -35,7 +35,7 @@ from b3c32.core import _CERTIFIED_BITS, _CROCKFORD32
 
 KNOWN_ENCODE_VECTORS = [
     (b"", "", "empty"),
-    (b"\x00", "00", "single_zero"),  # Start hand-derived boundrary-crossing vectors
+    (b"\x00", "00", "single_zero"),  # Start hand-derived boundary-crossing vectors
     (b"\x1f", "3W", "single_31"),
     (b"\xff", "ZW", "single_255"),
     (b"\x00\x01", "000G", "trailing_one"),
@@ -120,11 +120,11 @@ class TestHashDigest:
     """Contract 4.1, 4.2, 4.3. The shipped hasher against reference vectors.
 
     Expected values come from the vendored reference file, never from
-    depo's own hasher, so the assertion can detect a wrong hasher rather
-    than comparing it against itself. Inputs are reconstructed by the
-    rule the reference file states: byte i is i mod 251. Only the
-    unkeyed hash field is used; keyed_hash and derive_key are other
-    modes and are not depo's scheme.
+    the implementation's own hasher, so the assertion can detect a
+    wrong hasher rather than comparing it against itself. Inputs are
+    reconstructed by the rule the reference file states: byte i is
+    i mod 251. Only the unkeyed hash field is used; keyed_hash and
+    derive_key are other modes and are not this scheme.
     """
 
     # Blake3's own published vector file, pinned and vendored.
@@ -359,11 +359,11 @@ class TestEncoderCrossLineage:
 
 
 class TestHashB32:
-    """Contract 4.9, 4.10, 4.11. The composed shortcode function.
+    """Contract 4.9, 4.10, 4.11. The composed code function.
     Units are certified separately; composition proves wiring,
-    the ladder prefix relation, and the guard against off-ladder widths.
-    Frozen addresses are depo-derived and provisional until normpic convergence.
-    """
+    the 40-bit prefix relation, and the guard against uncertified
+    widths. Convenience vectors are reference-implementation-derived
+    and detect change, not error."""
 
     @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
     def test_wiring(self, data):
@@ -379,13 +379,15 @@ class TestHashB32:
 
     @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
     def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
-        """Convenience vectors, depo-derived. Documents byte-oriented input;
-        detects change only, not error."""
+        """Convenience vectors, reference-implementation-derived.
+        Documents byte-oriented input; detects change only, not error."""
         assert hash_b32(data, 120) == expect
 
     @pytest.mark.parametrize("data", [b"", b"x" * 1025, b"Hello, World!\n"])
     def test_prefix_holds_across_aligned_widths(self, data: bytes):
-        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding."""
+        """Contract 4.10. Encoding prefixes a wider 40-bit-aligned encoding,
+        compared region crossing the 64-byte XOF block.
+        Raw blake3 calls because these widths are uncertified for the API."""
         narrow = encode_crockford_b32(blake3(data).digest(length=15))
         wide = encode_crockford_b32(blake3(data).digest(length=20))
         assert wide.startswith(narrow), f"prefix broken on {data!r}"
@@ -581,7 +583,7 @@ class TestCoerceCrockfordB32:
         ],
     )
     def test_idempotent(self, code: str):
-        """Canonical twice should produce same result as once"""
+        """Coercing twice should produce same result as once"""
         once = coerce_crockford_b32(code)
         twice = coerce_crockford_b32(once)
         assert once == twice
