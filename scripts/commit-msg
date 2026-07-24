@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""
+Git commit-msg hook to enforce commit message format:
+- Title: max 50 characters including prefix
+- Format: <prefix>: <message>
+- Prefix: max 4 characters
+- Message must start with capital letter or number
+- Blank line between title and body
+- Body lines: max 72 characters
+- Body lines: start with even number of spaces + bullet (- or *)
+- No emoji allowed anywhere in commit message
+- No signature blocks (Co-Authored-By, links, etc.)
+"""
+
+import sys
+import re
+
+
+def contains_emoji(text):
+    """Check if text contains emoji characters."""
+    # Unicode ranges for emoji
+    emoji_pattern = re.compile(
+        "["
+        "\U0001f600-\U0001f64f"  # emoticons
+        "\U0001f300-\U0001f5ff"  # symbols & pictographs
+        "\U0001f680-\U0001f6ff"  # transport & map
+        "\U0001f1e0-\U0001f1ff"  # flags (iOS)
+        "\U00002500-\U00002bef"  # chinese char
+        "\U00002702-\U000027b0"
+        "\U00002702-\U000027b0"
+        "\U000024c2-\U0001f251"
+        "\U0001f926-\U0001f937"
+        "\U00010000-\U0010ffff"
+        "\u2640-\u2642"
+        "\u2600-\u2b55"
+        "\u200d"
+        "\u23cf"
+        "\u23e9"
+        "\u231a"
+        "\ufe0f"  # dingbats
+        "\u3030"
+        "]+",
+        flags=re.UNICODE,
+    )
+    return bool(emoji_pattern.search(text))
+
+
+def contains_signature_block(lines):
+    """Check if commit message contains signature blocks."""
+    signature_patterns = [
+        r"Co-Authored-By:",
+        r"Signed-off-by:",
+        r"🤖.*Generated.*with.*Claude",
+        r"\[Claude.*Code\]",
+        r"https?://.*claude.*",
+        r"noreply@anthropic\.com",
+        r"@anthropic\.com",
+    ]
+
+    for line in lines:
+        for pattern in signature_patterns:
+            if re.search(pattern, line, re.IGNORECASE):
+                return True
+    return False
+
+
+def main():
+    commit_msg_file = sys.argv[1]
+
+    with open(commit_msg_file, "r") as f:
+        raw_lines = f.read().split("\n")
+
+    # Strip git template comments and the scissors block, then re-trim
+    kept = []
+    for line in raw_lines:
+        if line.startswith("#"):
+            if ">8" in line:
+                break
+            continue
+        kept.append(line)
+    content = "\n".join(kept).strip()
+
+    if not content:
+        print("Error: Empty commit message")
+        sys.exit(1)
+
+    errors = []
+
+    lines = content.split("\n")
+    title = lines[0]
+
+    # Check title length
+    if len(title) > 50:
+        errors.append(f"Commit title too long ({len(title)} chars, max 50)")
+        errors.append(f"Title: {title}")
+
+    # Check title format: prefix: message
+    pattern = r"^([A-Za-z]{1,4}): ([A-Z0-9].*)$"
+    match = re.match(pattern, title)
+
+    if not match:
+        errors.append("Invalid commit message format")
+        errors.append("Expected: <prefix>: <message>")
+        errors.append("- Prefix: 1-4 letters")
+        errors.append("- Message: starts with capital letter or number")
+        errors.append(f"Got: {title}")
+
+    # Check for emoji in entire commit message
+    if contains_emoji(content):
+        errors.append("Emoji not allowed in commit messages")
+        errors.append("Remove all emoji characters from title and body")
+
+    # Check for signature blocks
+    if contains_signature_block(lines):
+        errors.append("Signature blocks not allowed in commit messages")
+        errors.append("Remove Co-Authored-By, links, and other signature content")
+        errors.append("See doc/CONTRIBUTE.md for proper commit format")
+
+    # Check for blank line after title (only if there's a body)
+    if len(lines) > 1 and lines[1] != "":
+        errors.append("Missing blank line between title and body")
+
+    # Check body lines
+    if len(lines) > 2:
+        for i, line in enumerate(lines[2:], start=3):
+            # Allow blank lines in body
+            if line == "":
+                continue
+
+            # Check line length
+            if len(line) > 72:
+                errors.append(f"Body line {i} too long ({len(line)} chars, max 72)")
+                errors.append(f"Line: {line}")
+
+            # Check format: even spaces + bullet
+            body_pattern = r"^((?:  )*)[-*] .+$"
+            if not re.match(body_pattern, line):
+                errors.append(f"Body line {i} invalid format")
+                errors.append(
+                    "Expected: even number of spaces (0, 2, 4...) + bullet (- or *) + space + text"
+                )
+                errors.append(f"Got: {line}")
+
+    # Report all errors at once
+    if errors:
+        for error in errors:
+            print(f"Error: {error}")
+        sys.exit(1)
+
+    # All checks passed
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
+
