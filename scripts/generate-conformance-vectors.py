@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["b3c32"]
+#
+# [tool.uv.sources]
+# b3c32 = { path = "../python", editable = true }
+# ///
 # scripts/generate-conformance-vectors.py
 """
 Emit the shared conformance vector file for the blake3 + Crockford scheme.
@@ -18,9 +25,9 @@ import json
 import sys
 from pathlib import Path
 
-from depo.util.shortcode import _encode_crockford_b32, _hash_digest
+from b3c32.core import encode_crockford_b32, hash_digest
 
-BLAKE3_VECTORS = Path("tests/vectors/blake3-1.8.5-93a431c.json")
+BLAKE3_VECTORS = Path("vectors/blake3-1.8.5-93a431c.json")
 
 SCHEME_COMMENT = (
     "Unkeyed BLAKE3 sliced to 120 bits, encoded low-pad bitstream Crockford "
@@ -107,7 +114,7 @@ def build_cases() -> list[dict]:
     cases: list[dict] = []
 
     for data, expect in ENCODE_VECTORS + PERIODIC_VECTORS:
-        check(f"encode {data!r}", _encode_crockford_b32(data), expect)
+        check(f"encode {data!r}", encode_crockford_b32(data), expect)
         cases.append({"input_hex": data.hex(), "encoded": expect})
 
     digests = {
@@ -116,9 +123,9 @@ def build_cases() -> list[dict]:
     }
     for input_len, expect in REFERENCE_VECTORS:
         data = reference_input(input_len)
-        digest = _hash_digest(data)
+        digest = hash_digest(data, 120)
         check(f"digest len {input_len}", digest.hex(), digests[input_len][:30])
-        check(f"pipeline len {input_len}", _encode_crockford_b32(digest), expect)
+        check(f"pipeline len {input_len}", encode_crockford_b32(digest), expect)
         cases.append(
             {
                 "input_len": input_len,
@@ -128,8 +135,8 @@ def build_cases() -> list[dict]:
         )
 
     for data, expect in CONVENIENCE_VECTORS:
-        digest = _hash_digest(data)
-        check(f"pipeline {data!r}", _encode_crockford_b32(digest), expect)
+        digest = hash_digest(data, 120)
+        check(f"pipeline {data!r}", encode_crockford_b32(digest), expect)
         cases.append(
             {
                 "input_hex": data.hex(),
@@ -158,3 +165,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
