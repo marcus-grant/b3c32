@@ -18,16 +18,15 @@ from blake3 import blake3
 from hypothesis import given
 from hypothesis import strategies as st
 
-from b3c32.core import (
-    _CERTIFIED_BITS,
-    _CROCKFORD32,
+from b3c32 import (
+    UncertifiedWidthError,
     coerce_crockford_b32,
     decode_crockford_b32,
     encode_crockford_b32,
     hash_b32,
     hash_digest,
 )
-from b3c32.core import UncertifiedWidthError
+from b3c32.core import _CERTIFIED_BITS, _CROCKFORD32
 
 # Vectors here are hand-derived and confirmed against independent codecs.
 # scripts/audit-conformance-vectors.sh rederives the published set using only

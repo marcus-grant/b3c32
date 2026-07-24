@@ -6,7 +6,7 @@ Date: 2026-07-24
 License: Apache-2.0
 """
 
-from b3c32.errors import UncertifiedWidthError
+from b3c32 import UncertifiedWidthError
 
 
 class TestUncertifiedWidthError:
