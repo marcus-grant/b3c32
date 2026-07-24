@@ -162,22 +162,25 @@ class TestHashDigest:
             msg = f"chunk boundary mismatch at input_len={case['input_len']}"
             assert digest == bytes.fromhex(case["hash"][:30]), msg
 
-    def test_reference_output_is_prefix_consistent(self):
-        """Contract 4.2. Digest prefixes reference output past the 64B XOF block."""
+    def test_reference_output_full_equality(self) -> None:
+        """Contract 4.2. Shipped hasher reproduces every byte of the
+        reference extended output, crossing the 64-byte XOF block."""
         for case in self._load_blake3_cases():
-            data = _reference_input(case["input_len"])
             full = bytes.fromhex(case["hash"])
-            msg = f"prefix broken at input_len={case['input_len']}"
             assert len(full) > 64, "reference output must cross the XOF block"
-            assert full.startswith(_hash_digest(data)), msg
+            data = _reference_input(case["input_len"])
+            actual = blake3(data).digest(length=len(full))
+            msg = f"full output mismatch at input_len={case['input_len']}"
+            assert actual == full, msg
 
-    def test_shipped_build_is_prefix_consistent(self):
-        """Contract 4.3. Shipped blake3 short output prefixes a longer one."""
+    def test_shipped_build_is_prefix_consistent(self) -> None:
+        """Contract 4.3. Shipped build's short output byte-prefixes its
+        long output, compared region crossing the 64-byte XOF block."""
         for data in [b"", b"\x00", b"hello", b"x" * 1025]:
             long_output = blake3(data).digest(length=131)
+            short_output = blake3(data).digest(length=70)
             msg = f"shipped build prefix broken on {data!r}"
-            assert len(long_output) > 64, "long output must cross the XOF block"
-            assert long_output.startswith(_hash_digest(data)), msg
+            assert long_output.startswith(short_output), msg
 
 
 class TestCrockfordAlphabet:
