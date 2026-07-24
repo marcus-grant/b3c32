@@ -9,3 +9,4 @@ where an implementation and it conflict, the document wins.
 - [conformance](./conformance.md) the normative contract:
   - The scheme, where every expected value comes from,
   - Also, what an implementation must prove
+- [plan/](./plan/README.md) planning documents: fixes, roadmap, unplanned
