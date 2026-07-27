@@ -16,6 +16,7 @@ _PUBLIC_INTERFACES = {
     "encode_crockford_b32",
     "hash_b32",
     "hash_digest",
+    "verify_conformance",
 }
 
 

@@ -14,6 +14,7 @@ from b3c32.core import (
     hash_digest,
 )
 from b3c32.errors import CoercionError, UncertifiedWidthError
+from b3c32.smoke import verify_conformance
 
 __all__ = [
     "CoercionError",
@@ -23,4 +24,5 @@ __all__ = [
     "encode_crockford_b32",
     "hash_b32",
     "hash_digest",
+    "verify_conformance",
 ]
