@@ -59,3 +59,33 @@ class TestVerifyConformance:
         monkeypatch.setattr("b3c32.smoke.encode_crockford_b32", fake_encode)
         with pytest.raises(AssertionError, match="prefix"):
             verify_conformance()
+
+    def test_red_on_encode_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A drifted raw encode fails the non-aligned claim."""
+
+        def fake_encode(data: bytes) -> str:
+            return "WRONG"
+
+        monkeypatch.setattr("b3c32.smoke.encode_crockford_b32", fake_encode)
+        with pytest.raises(AssertionError, match="non-aligned|prefix"):
+            verify_conformance()
+
+    def test_red_on_coercion_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A drifted coercion fails the coercion value claim."""
+
+        def fake_coerce(code: str) -> str:
+            return "WRONG"
+
+        monkeypatch.setattr("b3c32.smoke.coerce_crockford_b32", fake_coerce)
+        with pytest.raises(AssertionError, match="coercion"):
+            verify_conformance()
+
+    def test_red_on_coercion_gate_loss(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A coerce that stops raising fails the raise claim."""
+
+        def fake_coerce(code: str) -> str:
+            return "0111"
+
+        monkeypatch.setattr("b3c32.smoke.coerce_crockford_b32", fake_coerce)
+        with pytest.raises(AssertionError, match="CoercionError not raised"):
+            verify_conformance()

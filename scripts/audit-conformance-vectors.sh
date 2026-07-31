@@ -14,9 +14,11 @@
 # only. The encoding legs, basenc and tr, are genuinely foreign lineage.
 #
 # Usage: scripts/audit-conformance-vectors.sh [vector-file]
+#        scripts/audit-conformance-vectors.sh --self-test
 #
 # Author: Marcus Grant
 # Date: 2026-07-23
+# Revised: [2026-07-27]
 # License: Apache-2.0
 
 set -euo pipefail
@@ -48,6 +50,36 @@ if [[ "$b3sum_version" != "$B3SUM_PIN" ]]; then
     echo "  set B3C32_AUDIT_ALLOW_VERSION_DRIFT=1 to run anyway" >&2
     exit 1
   fi
+fi
+
+if [[ "${1:-}" == "--self-test" ]]; then
+  default_vectors="vectors/b3c32-conformance.json"
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT
+
+  # Leg 1: clean run against the default vector file.
+  if ! "$0" >/dev/null 2>&1; then
+    echo "self-test failed: clean run exited nonzero" >&2
+    exit 1
+  fi
+
+  # Leg 2: corrupt an encoded value; expect nonzero exit.
+  jq '.cases[3].encoded = "WRONG"' "$default_vectors" > "$tmp"
+  if "$0" "$tmp" >/dev/null 2>&1; then
+    echo "self-test failed: corrupted encoded run exited zero" >&2
+    exit 1
+  fi
+
+  # Leg 3: corrupt all digest_encoded values; expect nonzero exit.
+  jq '(.cases[] | select(has("digest_encoded"))).digest_encoded = "WRONG"' \
+    "$default_vectors" > "$tmp"
+  if "$0" "$tmp" >/dev/null 2>&1; then
+    echo "self-test failed: corrupted digest_encoded run exited zero" >&2
+    exit 1
+  fi
+
+  echo "self-test passed"
+  exit 0
 fi
 
 [[ -r "$VECTORS" ]] || {
@@ -86,9 +118,14 @@ report() {
   fi
 }
 
-# Encoder cases: encode the input bytes directly.
+# Encoder cases: encode the input bytes directly. The empty input is a
+# real case: empty hex derives an empty encoding through the same pipe.
 while IFS=$'\t' read -r input_hex encoded; do
-  [[ -n "$encoded" ]] || continue
+  if [[ -z "$input_hex" && -z "$encoded" ]]; then
+    derived=$(printf '%s' "$input_hex" | crockford_from_hex)
+    report "encode (empty)" "$derived" "$encoded"
+    continue
+  fi
   derived=$(printf '%s' "$input_hex" | crockford_from_hex)
   report "encode ${input_hex:0:16}" "$derived" "$encoded"
 done < <(jq -r '.cases[]
@@ -117,8 +154,14 @@ done < <(jq -r '.cases[]
   | [.input_len, .digest_encoded] | @tsv' "$VECTORS")
 
 echo
+expected=$(jq '.cases | length' "$VECTORS")
 if ((fails > 0)); then
   echo "$fails of $checked disagreed" >&2
   exit 1
 fi
-echo "$checked checked, all agree"
+if ((checked != expected)); then
+  echo "checked $checked but file holds $expected cases" >&2
+  echo "  a case failed to match any audit leg" >&2
+  exit 1
+fi
+echo "$checked checked of $expected cases, all agree"
