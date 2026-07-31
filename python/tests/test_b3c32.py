@@ -400,6 +400,34 @@ class TestHashB32:
         assert wide.startswith(encode_crockford_b32(data[:15]))
         assert not wide.startswith(encode_crockford_b32(data[:16]))
 
+    def test_frozen_file_contains_handheld_literals(self) -> None:
+        """Every hand-held literal appears in the frozen file, so
+        generator-versus-suite drift fails every run, not at
+        regeneration time only."""
+        root = Path(__file__).parents[2]
+        frozen_path = root / "vectors" / "b3c32-conformance.json"
+        cases = json.loads(frozen_path.read_text(encoding="utf-8"))["cases"]
+        encodes = {c["input_hex"]: c["encoded"] for c in cases if "encoded" in c}
+        pipelines = {
+            c["input_len"]: c["digest_encoded"]
+            for c in cases
+            if "input_len" in c and "digest_encoded" in c
+        }
+        for data, expect, _ in KNOWN_ENCODE_VECTORS:
+            msg = f"frozen file missing or drifted on encode {data!r}"
+            assert encodes.get(data.hex()) == expect, msg
+        for input_len, expect in REFERENCE_ENCODED_VECTORS:
+            msg = f"frozen file missing or drifted on pipeline len {input_len}"
+            assert pipelines.get(input_len) == expect, msg
+        for data, expect, _ in CONVENIENCE_ENCODED_VECTORS:
+            hits = [
+                c
+                for c in cases
+                if c.get("input_hex") == data.hex() and "digest_encoded" in c
+            ]
+            msg = f"frozen file missing or drifted on convenience {data!r}"
+            assert hits and hits[0]["digest_encoded"] == expect, msg
+
 
 class TestDecodeCrockfordB32:
     """Contract section 5, not a numbered assertion class. Strict decode
