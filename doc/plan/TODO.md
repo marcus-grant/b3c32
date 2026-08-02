@@ -7,6 +7,17 @@ ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
 
+## Public alphabet export
+
+First task of the new session. Depo's upload tests need the contract
+alphabet as data and currently keep a private mirror with a comment
+pointing here. NormPic will likely want the same.
+
+- Export the alphabet from the package, name and form to decide:
+  string constant, frozenset, or both
+- Manifest and surface test grow accordingly
+- Depo swaps its mirror for the import at next pin bump
+
 ## Fix 4: Verifier anchor test discards its expected values
 
 `test_matches_known_vectors` compares encoder against verifier
