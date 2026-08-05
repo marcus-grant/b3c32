@@ -17,6 +17,18 @@ pointing here. NormPic will likely want the same.
   string constant, frozenset, or both
 - Manifest and surface test grow accordingly
 - Depo swaps its mirror for the import at next pin bump
+- Conformance doc gains the consumer contract surface:
+  verify_conformance as the entry point consumers call,
+  tag pinning, and what a version bump signals,
+  since the doc proves the scheme
+  but never says how a consumer notices it changing
+- Restore the lost sentence in doc/conformance.md Oracle pins,
+  which ends dangling at "Where the draft"
+  before the Alphabet independence header,
+  recovering intent from the fix 2 or fix 3 diffs rather than rewriting
+- Get ruff and pyright green before committing
+- Patchbump to `0.0.2`.
+- Start thinking when the first minor bump spec has crystalized enough.
 
 ## Fix 4: Verifier anchor test discards its expected values
 
