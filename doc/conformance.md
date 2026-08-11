@@ -57,7 +57,8 @@ bit-window encoder (the shipped implementation) and the standard library's
 RFC 4648 base32 plus a separately-certified alphabet map (the verifier). A
 foreign-runtime RFC 4648 encoder, padding stripped and alphabet translated,
 reduces the shared-substrate residual; it runs as a separate audit rather
-than in the suite, described under Verification artifacts. Where the draft
+than in the suite, described under Verification artifacts.
+Where the draft diverges from crockford.com, the draft wins.
 
 ## Alphabet independence
 
