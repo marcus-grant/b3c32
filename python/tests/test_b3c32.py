@@ -26,7 +26,7 @@ from b3c32 import (
     hash_b32,
     hash_digest,
 )
-from b3c32.core import _CERTIFIED_BITS, _CROCKFORD32
+from b3c32.core import _CERTIFIED_BITS, CROCKFORD32_ALPHABET
 
 # Vectors here are hand-derived and confirmed against independent codecs.
 # scripts/audit-conformance-vectors.sh rederives the published set using only
@@ -266,7 +266,7 @@ class TestEncoderCrossLineage:
         encode_crockford_b32; used only in tests as the cross-lineage
         oracle.
         """
-        _CROCK_TRANS = str.maketrans(self._RFC4648_B32, _CROCKFORD32)
+        _CROCK_TRANS = str.maketrans(self._RFC4648_B32, CROCKFORD32_ALPHABET)
         b32 = base64.b32encode(data).decode("ascii").rstrip("=")
         return b32.translate(_CROCK_TRANS)
 
@@ -459,7 +459,7 @@ class TestCodecProperties:
     @given(st.binary(max_size=256))
     def test_alphabet_closure(self, data: bytes):
         """Encoded output contains only alphabet symbols."""
-        assert set(encode_crockford_b32(data)) <= set(_CROCKFORD32)
+        assert set(encode_crockford_b32(data)) <= set(CROCKFORD32_ALPHABET)
 
     @given(st.binary(max_size=256))
     def test_length_invariant(self, data: bytes):
