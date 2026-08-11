@@ -18,7 +18,35 @@ against the same frozen vectors.
 - [doc/](./doc/README.md) contract and design documents
 - [vectors/](./vectors/) frozen conformance vectors, the contract artifacts
 - [scripts/](./scripts/) vector generation and external audit tooling
-- [python/](./python/) reference implementation, a uv project
+- [python/](./python/README.md) reference implementation, a uv project;
+  - installs from PyPI as `b3c32`, or from git with this subdirectory
+
+## Consuming
+
+Install from PyPI:
+
+    uv add b3c32
+
+Or from git, pinning a tag, when you need an unreleased commit:
+
+    [project]
+    dependencies = ["b3c32"]
+
+    [tool.uv.sources]
+    b3c32 = { git = "https://github.com/marcus-grant/b3c32", subdirectory = "python", tag = "v0.0.2" }
+
+Pin an exact version either way. The project is pre-1.0 and no
+compatibility policy is in force, so any release may change the
+contract. Call verify_conformance in your own suite to learn when it
+does:
+
+    def test_b3c32_contract():
+        from b3c32 import verify_conformance
+        verify_conformance()
+
+One test, and it raises AssertionError naming the failed claim. The
+normative statement of what is being conformed to is in
+[doc/conformance.md](./doc/conformance.md).
 
 ## Status
 

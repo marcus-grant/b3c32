@@ -55,4 +55,5 @@ reference vectors.
 Pre-release. Certification hardening is in progress. The full scheme
 definition, the normative conformance contract, and the frozen vectors
 live at the project root:
-https://github.com/marcus-grant/b3c32
+<https://github.com/marcus-grant/b3c32>
+
