@@ -7,28 +7,6 @@ ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
 
-## Publish to PyPI pre-MVP
-
-Decided after NormPic's blind-integration friction: index installation
-dissolves the subdirectory and sources-block tribal knowledge, so
-publication pulls forward from the MVP finale. Dev-status classifiers
-keep the artifact honest about its pre-MVP state.
-
-- License file, classifiers with development status, readme as long
-  description pointing at the root README
-- Trusted publisher wired to a GitHub Action, publishing on tags only
-- Bump version, tag 0.0.2 containing the alphabet export, publish
-- NormPic and depo may swap to the index dependency at their next bump
-- License file, classifiers with development status, readme as long
-  description pointing at the root README
-- Root README gains a Consuming section: index install as primary,
-  the git sources block with subdirectory and tag rev as fallback,
-  the tag-pin convention, the one-test verify_conformance pattern
-- Python layout bullet gains a subdirectory-install pointer
-- Trusted publisher wired to a GitHub Action, publishing on tags only
-- Bump version, tag 0.0.2 containing the alphabet export, publish
-- NormPic and depo may swap to the index dependency at their next bump
-
 ## Fix 4: Verifier anchor test discards its expected values
 
 `test_matches_known_vectors` compares encoder against verifier

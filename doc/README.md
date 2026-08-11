@@ -16,3 +16,4 @@ with tab-completable root-relative paths.
   - The scheme, where every expected value comes from,
   - Also, what an implementation must prove
 - [plan/](./plan/README.md) planning documents: fixes, roadmap, unplanned
+- [publish.md](./publish.md) how a release reaches PyPI
