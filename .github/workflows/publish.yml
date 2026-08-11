@@ -16,7 +16,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: python/dist/
+          path: |
+            python/dist/*.whl
+            python/dist/*.tar.gz
 
   testpypi:
     needs: build
@@ -47,3 +49,4 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
