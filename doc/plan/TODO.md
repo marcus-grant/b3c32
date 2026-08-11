@@ -81,6 +81,8 @@ so the publish workflow will happily build and publish a commit that
 never passed it. Publication is irreversible, which makes this the
 one place manual discipline is not enough.
 
+- Bump action versions off Node 20: checkout and upload-artifact
+  to v5, setup-uv to v6
 - Test job in the publish workflow: ruff, pyright, pytest against the
   checkout, with both publish jobs depending on it
 - Tests on push and PR, not only at publish, resolving the standing
