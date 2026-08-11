@@ -8,8 +8,7 @@ License: Apache-2.0
 
 import pytest
 
-from b3c32 import encode_crockford_b32
-from b3c32 import verify_conformance
+from b3c32 import encode_crockford_b32, verify_conformance
 
 
 class TestVerifyConformance:

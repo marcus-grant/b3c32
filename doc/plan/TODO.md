@@ -7,29 +7,6 @@ ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
 
-## Public alphabet export
-
-First task of the new session. Depo's upload tests need the contract
-alphabet as data and currently keep a private mirror with a comment
-pointing here. NormPic will likely want the same.
-
-- Export the alphabet from the package, name and form to decide:
-  string constant, frozenset, or both
-- Manifest and surface test grow accordingly
-- Depo swaps its mirror for the import at next pin bump
-- Conformance doc gains the consumer contract surface:
-  verify_conformance as the entry point consumers call,
-  tag pinning, and what a version bump signals,
-  since the doc proves the scheme
-  but never says how a consumer notices it changing
-- Restore the lost sentence in doc/conformance.md Oracle pins,
-  which ends dangling at "Where the draft"
-  before the Alphabet independence header,
-  recovering intent from the fix 2 or fix 3 diffs rather than rewriting
-- Get ruff and pyright green before committing
-- Patchbump to `0.0.2`.
-- Start thinking when the first minor bump spec has crystalized enough.
-
 ## Publish to PyPI pre-MVP
 
 Decided after NormPic's blind-integration friction: index installation

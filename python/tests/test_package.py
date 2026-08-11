@@ -9,6 +9,7 @@ License: Apache-2.0
 import b3c32
 
 _PUBLIC_INTERFACES = {
+    "CROCKFORD32_ALPHABET",
     "UncertifiedWidthError",
     "CoercionError",
     "coerce_crockford_b32",
@@ -24,7 +25,7 @@ class TestPublicSurface:
     """The package manifest is the contract surface, exactly."""
 
     def test_all_is_exact(self) -> None:
-        """__all__ holds exactly the six contract names."""
+        """__all__ holds exactly the contract names."""
         assert set(b3c32.__all__) == _PUBLIC_INTERFACES
 
     def test_all_no_dupes(self) -> None:

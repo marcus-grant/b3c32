@@ -12,8 +12,9 @@ from blake3 import blake3
 from b3c32.errors import CoercionError, UncertifiedWidthError
 
 _CERTIFIED_BITS = frozenset({120})
-_CROCKFORD32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _TRANS_CROCKFORD_AMBIG = str.maketrans({"O": "0", "I": "1", "L": "1"})
+
+CROCKFORD32_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 
 def hash_digest(data: bytes, bits: int) -> bytes:
@@ -56,7 +57,7 @@ def encode_crockford_b32(data: bytes) -> str:
     symbols = []
     for i in range(symbol_count):
         symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
-        symbols.append(_CROCKFORD32[symbol_num])
+        symbols.append(CROCKFORD32_ALPHABET[symbol_num])
     return "".join(symbols)
 
 
@@ -97,7 +98,7 @@ def decode_crockford_b32(code: str) -> bytes:
     """
     accumulated_int = 0
     for symbol in code:
-        symbol_int_value = _CROCKFORD32.index(symbol)
+        symbol_int_value = CROCKFORD32_ALPHABET.index(symbol)
         # Shift left 5 to make room, OR to append this symbol's bits
         accumulated_int = (accumulated_int << 5) | symbol_int_value
     bit_count = 5 * len(code)
@@ -126,6 +127,6 @@ def coerce_crockford_b32(code: str) -> str:
         raise CoercionError()
 
     for ch in s:
-        if ch not in _CROCKFORD32:
+        if ch not in CROCKFORD32_ALPHABET:
             raise CoercionError(ch)
     return s
