@@ -16,17 +16,14 @@ keep the artifact honest about its pre-MVP state.
 
 - License file, classifiers with development status, readme as long
   description pointing at the root README
-- Trusted publisher wired to a GitHub Action, publishing on tags only
-- Bump version, tag 0.0.2 containing the alphabet export, publish
-- NormPic and depo may swap to the index dependency at their next bump
-- License file, classifiers with development status, readme as long
-  description pointing at the root README
 - Root README gains a Consuming section: index install as primary,
   the git sources block with subdirectory and tag rev as fallback,
   the tag-pin convention, the one-test verify_conformance pattern
 - Python layout bullet gains a subdirectory-install pointer
 - Trusted publisher wired to a GitHub Action, publishing on tags only
+- Dry run to TestPyPI first, since a version number on PyPI
 - Bump version, tag 0.0.2 containing the alphabet export, publish
+  can never be reused
 - NormPic and depo may swap to the index dependency at their next bump
 
 ## Fix 4: Verifier anchor test discards its expected values

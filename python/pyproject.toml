@@ -3,9 +3,19 @@
 name = "b3c32"
 version = "0.0.1"
 description = "Compact, hand-writable, prefix-matchable BLAKE3 XOF hashes in Crockford Base32"
+readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = ["blake3"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security :: Cryptography",
+]
+
+[project.urls]
+Homepage = "https://github.com/marcus-grant/b3c32"
 
 [dependency-groups]
 dev = ["pytest", "hypothesis", "ruff", "pyright"]
