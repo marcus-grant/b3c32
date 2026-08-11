@@ -74,6 +74,20 @@ Settled design:
 
 - Pin the acceptance with a test naming the documented rationale
 
+## CI and publish gating
+
+Nothing mechanically checks a tagged commit. The full gate is manual,
+so the publish workflow will happily build and publish a commit that
+never passed it. Publication is irreversible, which makes this the
+one place manual discipline is not enough.
+
+- Test job in the publish workflow: ruff, pyright, pytest against the
+  checkout, with both publish jobs depending on it
+- Tests on push and PR, not only at publish, resolving the standing
+  no-CI hazard
+- Audit script in CI needs b3sum pinned in the runner, so it rides
+  later or gets its own entry
+
 ## Conformance doc sharpening
 
 Clarity edits settled in discussion, riding with the fixes above.
