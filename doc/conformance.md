@@ -191,6 +191,35 @@ confirmed by hand against two independent web codecs during derivation. Only
 the convenience vectors rest on the reference implementation alone;
 they detect change, not error, and are labelled as such.
 
+## Consumer surface
+
+Consumers pin a git tag and call `verify_conformance` in their own test suites.
+It takes no arguments and raises AssertionError naming the failed claim.
+Its scope is drift detection through the public API at the certified width:
+one curated assertion per contract claim a consumer depends on.
+It is not itself a certification.
+Deep certification,
+the reference-file vectors and the exhaustive codec domains,
+is this project's own suite.
+
+A consumer suite that calls it learns when the contract moves underneath it,
+at the cost of one test.
+That is the intended integration.
+
+While the project is pre-1.0 no compatibility policy is in force. Any
+release may change the contract. Pin an exact tag, bump deliberately,
+and let verify_conformance tell you whether the bump moved anything a
+consumer depends on. What version 1 means, and whether reaching it
+requires a break, is not yet decided.
+
+Consumers derive their own expected values against the methodology in
+this document rather than consuming this project's published vector
+file as an oracle. A consumer that checks against b3c32's own emitted
+values confirms only that b3c32 agrees with itself, which is the
+consensus failure the governing rule rejects. The published file is a
+regression pin, useful for detecting change, not evidence of
+correctness.
+
 ## Wrong-code resolution
 
 Hash bugs are effectively all-or-nothing: a broken hasher fails the
