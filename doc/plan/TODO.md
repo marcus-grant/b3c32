@@ -1,11 +1,89 @@
 # TODO
 
 Imminent work, ordered by priority.
-The first eight entries are the founding sequence:
+The eight fix entries following streaming are the founding sequence:
 findings from the pre-extraction adversarial review of the conformance tooling,
 ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
+
+## Streaming: whole-file buffering blocks large inputs
+
+`hash_b32` takes materialised bytes,
+so peak memory scales with input size.
+Scout routinely hashes multi-gigabyte files and tar archives near 100GB;
+those cannot be hashed at all.
+normpic records this as blocking its own streaming entry
+and gating remote sourcing entirely.
+Settled design:
+
+- Chunk-consuming core holds hasher state, slicing, encoding,
+  progress throttle and completion guarantee; internal for now
+- Stream-accepting entry point drives a sync read loop over the core
+- Path-accepting entry point opens binary, delegates, closes on both paths
+- Opt-in push progress via `on_progress`, receiving cumulative bytes consumed
+- Total bytes never appears in the signature; only the caller knows one
+- `progress_interval` in seconds, minimum spacing, not exact
+- Completion callback fires unconditionally, once with zero on an empty file
+- Errors propagate; an interrupted read never yields a digest
+- Core stays sync and blocking; `async` is a later driver over the same core
+
+## CLI: no out-of-band way to produce hashes
+
+Scout needs hashes fed into its SQLite manifests by hand
+during workflow exploration,
+and its hash column needs independent sanity checking.
+Depends on the path and stream entry points.
+Settled design:
+
+- `b3c32sum`:
+  - console script,
+  - argparse only,
+  - single package
+- `Coreutils` output shape:
+  - `-n/--no-name` prints the hash alone
+  - `-w/--width-bits` and `-W/--width-symbols`,
+    - mutually exclusive,
+    - default 120 bits;
+      - refuses uncertified widths
+  - `stdin` on no arguments or `-`,
+    - printed as `-` in the filename column
+  - `-T/--total-bytes` supplies a stdin progress total; error with a path
+  - `-c` takes one expected hash; normalized both sides, strict length
+- Progress automatic on `TTY` `stderr`,
+  - `--progress` and `--no-progress` override
+- Exit codes from a declared map:
+  - 0 success,
+  - 1 mismatch,
+  - 2 usage error,
+  - 3 unreadable input
+- Deferred:
+  - Sums-file check mode.
+    - When it lands,
+      - `-c` disambiguates by filesystem first,
+      - hash shape second
+  - Prefix matching in check mode
+
+## Async: streaming core has no async driver
+
+The streaming entry point drives a sync read loop,
+so an `async` consumer must buffer whole inputs to hash them,
+defeating the memory bound streaming exists to provide.
+depo hashes Starlette uploads before they are committed
+and never holds a path;
+its ingestion pipeline assumes materialised bytes throughout
+and needs rework before it can consume this.
+Settled design:
+
+- Additive thin driver over the chunk-consuming core
+- Differs from the sync loop by the await;
+  - nothing below the loop forks
+- So results can't diverge:
+  - Digest, slicing, and encoding stay shared
+- Document that the sync reader under a `Starlette` `UploadFile` is the file object,
+  - not the `UploadFile`,
+  - whose read is a coroutine
+- Open: whether the surface accepts `async` iterators as well as readers
 
 ## Fix 4: Verifier anchor test discards its expected values
 
@@ -89,6 +167,24 @@ one place manual discipline is not enough.
   no-CI hazard
 - Audit script in CI needs b3sum pinned in the runner, so it rides
   later or gets its own entry
+
+## `Async`: streaming core has no `async` driver
+
+The streaming entry point drives a sync read loop,
+so an `async` consumer must buffer whole inputs to hash them,
+which defeats the memory bound streaming exists to provide.
+depo hashes Starlette uploads before they are committed to the store
+and never holds a path;
+its ingestion pipeline assumes materialised bytes throughout
+and needs rework before it can consume this.
+Settled design:
+
+- Additive thin driver over the chunk-consuming core from the streaming entry
+- Differs from the sync loop by the await; nothing below the loop forks
+- Digest, slicing, and encoding stay shared, so results cannot diverge
+- Document that the sync reader under a `Starlette` `UploadFile` is the file object,
+  not the `UploadFile`, whose read is a coroutine
+- Open: whether the surface accepts `async` iterators as well as `async` readers
 
 ## Conformance doc sharpening
 

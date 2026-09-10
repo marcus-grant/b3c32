@@ -24,7 +24,7 @@ First step of the Rust trajectory.
 Rust core under the existing Python surface.
 
 - The pytest suite runs against the Rust core through the binding,
-  free conformance testing over the whole certified apparatus
+  - free conformance testing over the whole certified apparatus
 - Rust replaces parts, then more, behind an unchanged Python API
 - Consumers notice nothing but the pin bump
 
@@ -40,7 +40,8 @@ never pairwise.
 - Pure Rust tests reading the root vectors directory
 - Cargo package from the rust subdirectory
 - The codec CLI lands here as a single static binary,
-  the port's first integration surface
+  - superseding the Python `b3c32sum` once it reaches parity;
+    - whether the Python one is retained is decided then.
 - Audit gains a non-Rust-core digest leg:
   the official C implementation or an independent blake3,
   upgrading convenience vectors from binding-level
@@ -52,8 +53,6 @@ The codec earns its own module when the CLI work begins.
 
 - Split core.py: codec functions into their own module,
   hashing and composition remaining
-- CLI feature sketch, delivered by the pure Rust implementation:
-  encode and decode anything, hash files, check codes
 
 ## Checksum layer
 
