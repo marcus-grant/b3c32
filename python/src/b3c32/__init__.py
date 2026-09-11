@@ -6,15 +6,15 @@ Date: 2026-07-24
 License: Apache-2.0
 """
 
-from b3c32.core import (
+from b3c32.codec import (
     CROCKFORD32_ALPHABET,
     coerce_crockford_b32,
     decode_crockford_b32,
     encode_crockford_b32,
-    hash_b32,
-    hash_digest,
 )
+from b3c32.digest import hash_digest
 from b3c32.errors import CoercionError, UncertifiedWidthError
+from b3c32.scheme import hash_b32
 from b3c32.smoke import verify_conformance
 
 __all__ = [
