@@ -67,20 +67,11 @@ class _IncrementalDigest:
 
 
 def hash_digest(data: bytes, bits: int) -> bytes:
-    """Compute the content digest at a certified width.
+    """Unkeyed blake3 over materialised bytes, cut at a certified width.
 
-    Unkeyed BLAKE3 XOF sliced to bits, gated on the certified set.
-
-    Args:
-        data: The bytes to hash.
-        bits: Digest width; must be in the certified set.
-
-    Returns:
-        The digest of bits // 8 bytes.
-
-    Raises:
-        UncertifiedWidthError: bits is not a certified width.
-    """
-    if bits not in _CERTIFIED_BITS:
-        raise UncertifiedWidthError(bits)
-    return blake3(data).digest(length=bits // 8)
+    The whole-input special case of _IncrementalDigest: one update, one cut.
+    The width error-check is the primitive's;
+    an uncertified width raises UncertifiedWidthError from there.
+    Retained as the original public name;
+    new surface follows the noun_from_source scheme."""
+    return _IncrementalDigest().update(data).digest(bits)
