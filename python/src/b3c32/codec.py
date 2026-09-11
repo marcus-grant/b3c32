@@ -1,40 +1,22 @@
-# python/src/b3c32/core.py
+# python/src/b3c32/codec.py
 """
-BLAKE3 hashing and Crockford Base32 codec for b3c32 codes.
+Crockford Base32 codec: low-pad bitstream encode, strict decode, and
+lenient coercion of human input toward the canonical form.
+
+Directly moved from old core.py module.
+That was the home of everything shown by (OriginDate).
+
 Author: Marcus Grant
-Date: 2026-01-26
-Revisions: [2026-07-24]
+OriginDate: 2026-07-24
+Date: 2026-09-11
 License: Apache-2.0
 """
 
-from blake3 import blake3
+from b3c32.errors import CoercionError
 
-from b3c32.errors import CoercionError, UncertifiedWidthError
-
-_CERTIFIED_BITS = frozenset({120})
 _TRANS_CROCKFORD_AMBIG = str.maketrans({"O": "0", "I": "1", "L": "1"})
 
 CROCKFORD32_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-
-
-def hash_digest(data: bytes, bits: int) -> bytes:
-    """Compute the content digest at a certified width.
-
-    Unkeyed BLAKE3 XOF sliced to bits, gated on the certified set.
-
-    Args:
-        data: The bytes to hash.
-        bits: Digest width; must be in the certified set.
-
-    Returns:
-        The digest of bits // 8 bytes.
-
-    Raises:
-        UncertifiedWidthError: bits is not a certified width.
-    """
-    if bits not in _CERTIFIED_BITS:
-        raise UncertifiedWidthError(bits)
-    return blake3(data).digest(length=bits // 8)
 
 
 def encode_crockford_b32(data: bytes) -> str:
@@ -59,24 +41,6 @@ def encode_crockford_b32(data: bytes) -> str:
         symbol_num = (num >> (5 * (symbol_count - 1 - i))) & 0b11111
         symbols.append(CROCKFORD32_ALPHABET[symbol_num])
     return "".join(symbols)
-
-
-def hash_b32(data: bytes, bits: int) -> str:
-    """Compute the canonical code at a certified width.
-
-    Composes hash_digest and the Crockford encoder.
-
-    Args:
-        data: The bytes to hash.
-        bits: Digest width; must be in the certified set.
-
-    Returns:
-        Crockford Base32 code of bits // 5 characters.
-
-    Raises:
-        UncertifiedWidthError: bits is not a certified width.
-    """
-    return encode_crockford_b32(hash_digest(data, bits))
 
 
 def decode_crockford_b32(code: str) -> bytes:

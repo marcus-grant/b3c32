@@ -1,14 +1,19 @@
 # python/tests/test_alphabet.py
 """
 Tests for the Crockford alphabet contract.
+
+Original of this file was moved from old main test module test_b3c32.py.
+These original elements were from that module's state at 2026-07-22.
+
 Author: Marcus Grant
-Date: 2026-08-11
+OriginDate: 2026-07-22
+Date: 2026-09-11
 License: Apache-2.0
 """
 
 import string
 
-from b3c32.core import CROCKFORD32_ALPHABET
+from b3c32.codec import CROCKFORD32_ALPHABET
 
 
 class TestCrockfordAlphabet:
