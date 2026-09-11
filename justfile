@@ -4,6 +4,12 @@
 
 pyrun := "uv run --directory python"
 
+set positional-arguments
+
+# Strip a leading python/ from each arg so root-relative paths from
+# shell completion reach the uv --directory python commands intact.
+trim := 'for a in "$@"; do printf "%s " "${a#python/}"; done'
+
 default:
     @just --list
 
@@ -13,15 +19,15 @@ init:
 
 # Lint python
 lint *args:
-    {{pyrun}} ruff check {{args}}
+    {{pyrun}} ruff check $({{trim}})
 
-# Type check python
+# Type check and deterministic correctness checks on python
 typecheck *args:
-    {{pyrun}} pyright {{args}}
+    {{pyrun}} pyright $({{trim}})
 
 # Run the python suite; extra args pass through, e.g. just test -k name
 test *args:
-    {{pyrun}} pytest {{args}}
+    {{pyrun}} pytest $({{trim}})
 
 # Pre-commit gate: lint, typecheck, test, in that order
 check: lint typecheck test
