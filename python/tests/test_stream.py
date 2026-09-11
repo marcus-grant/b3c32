@@ -11,12 +11,21 @@ Date: 2026-09-11
 License: Apache-2.0
 """
 
+import io
 from collections.abc import Iterator
+from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 
+import b3c32.stream as stream_module
 from b3c32.digest import UncertifiedWidthError, _IncrementalDigest
-from b3c32.stream import _ProgressReporter, digest_from_chunks
+from b3c32.stream import (
+    _ProgressReporter,
+    digest_from_chunks,
+    digest_from_path,
+    digest_from_stream,
+)
 from tests.vectors import _chunked, _reference_input
 
 
@@ -113,7 +122,10 @@ class TestProgressReporter:
 
 
 WIDTH = 120  # Only currently certified digest width, in bits
+BLOCK = 64  # blake3 compression block, in bytes
+LEAF = 1024  # blake3 leaf (chunk) size, in bytes
 LEAF_MINUS1 = 1023  # Blake3 leaf size minus one, for chunking tests
+DEFAULT_READ = 1 << 20  # digest_from_stream's default read_size
 REFERENCE_SIZE = 2049  # Size of the reference input, in bytes
 DATA = _reference_input(REFERENCE_SIZE)  # Standard test input, covers multiple leaves
 CHUNKS = _chunked(DATA, LEAF_MINUS1)  # Split into chunks for streaming tests
@@ -177,3 +189,78 @@ class TestDigestFromChunks:
         """The hashing primitive's width check is reached through the loop."""
         with pytest.raises(UncertifiedWidthError):
             digest_from_chunks(CHUNKS, 123)
+
+
+class TestDigestFromStream:
+    """The stream reader adapts a file object to the chunk loop."""
+
+    def test_wiring_matches_chunks(self) -> None:
+        """io.BytesIO(DATA) through the reader equals CHUNKS through the loop."""
+        expect = digest_from_chunks(CHUNKS, WIDTH)
+        assert digest_from_stream(io.BytesIO(DATA), WIDTH) == expect
+
+    @pytest.mark.parametrize(
+        "read_size",
+        [1, BLOCK, LEAF_MINUS1, LEAF, DEFAULT_READ],
+        ids=("single_byte", "block", "leaf_minus_1", "leaf", "default"),
+    )
+    def test_read_size_does_not_change_digest(self, read_size: int) -> None:
+        """Every read size yields the same digest; it is a reading knob only."""
+        expect = digest_from_chunks(CHUNKS, WIDTH)
+        actual = digest_from_stream(io.BytesIO(DATA), WIDTH, read_size=read_size)
+        assert actual == expect
+
+    def test_progress_reaches_total(self) -> None:
+        """Progress passes through the reader; the last value is len(DATA)."""
+        seen: list[int] = []
+        digest_from_stream(io.BytesIO(DATA), WIDTH, on_progress=seen.append)
+        assert seen[0] == 0
+        assert seen[-1] == REFERENCE_SIZE
+
+    def test_stream_is_not_closed(self) -> None:
+        """The reader never closes what it did not open."""
+        stream = io.BytesIO(DATA)
+        digest_from_stream(stream, WIDTH)
+        assert not stream.closed
+
+
+class TestDigestFromPath:
+    """The path reader opens, delegates to the stream reader, and closes."""
+
+    def test_wiring_matches_stream(self, tmp_path: Path) -> None:
+        """A file holding DATA equals io.BytesIO(DATA) through the stream reader."""
+        (path := tmp_path / "data.bin").write_bytes(DATA)
+        expect = digest_from_stream(io.BytesIO(DATA), WIDTH)
+        assert digest_from_path(path, WIDTH) == expect
+
+    def test_closes_file_on_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When the delegate raises, the opened file is still closed."""
+        (path := tmp_path / "data.bin").write_bytes(DATA)
+        captured: list[BinaryIO] = []
+
+        def fake(stream: BinaryIO, bits: int, **kwargs: object) -> bytes:
+            _ = bits  # unused, shut up LSPs
+            _ = kwargs
+            captured.append(stream)
+            raise Boom
+
+        monkeypatch.setattr(stream_module, "digest_from_stream", fake)
+        with pytest.raises(Boom):
+            digest_from_path(path, WIDTH)
+        assert len(captured) == 1
+        assert captured[0].closed
+
+    def test_progress_reaches_total(self, tmp_path: Path) -> None:
+        """Progress passes through the path reader; last value is the size."""
+        (path := tmp_path / "data.bin").write_bytes(DATA)
+        seen: list[int] = []
+        digest_from_path(path, WIDTH, on_progress=seen.append)
+        assert seen[0] == 0
+        assert seen[-1] == REFERENCE_SIZE
+
+    def test_missing_file_raises(self, tmp_path: Path) -> None:
+        """A missing path raises FileNotFoundError from open, not a digest."""
+        with pytest.raises(FileNotFoundError):
+            digest_from_path(tmp_path / "absent.bin", WIDTH)

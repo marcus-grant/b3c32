@@ -12,8 +12,10 @@ Date: 2026-09-11
 License: Apache-2.0
 """
 
+import os
 import time
 from collections.abc import Callable, Iterable
+from typing import BinaryIO
 
 from b3c32.digest import _IncrementalDigest
 
@@ -100,3 +102,49 @@ def digest_from_chunks(
         reporter.maybe_report()
     reporter.finish()
     return hasher.digest(bits)
+
+
+def digest_from_stream(
+    stream: BinaryIO,
+    bits: int,
+    *,
+    read_size: int = 1 << 20,
+    on_progress: OptionalCallback = None,
+    interval_ms: int = 1000,
+) -> bytes:
+    """Digest a binary stream at a certified width.
+
+    Reads read_size bytes at a time until the stream returns empty and
+    feeds them to digest_from_chunks, which owns progress and errors.
+    The stream is not closed; the caller opened it. read_size is a
+    reading knob only and never affects the digest.
+    """
+    return digest_from_chunks(
+        iter(lambda: stream.read(read_size), b""),
+        bits,
+        on_progress=on_progress,
+        interval_ms=interval_ms,
+    )
+
+
+def digest_from_path(
+    path: str | os.PathLike[str],
+    bits: int,
+    *,
+    read_size: int = 1 << 20,
+    on_progress: OptionalCallback = None,
+    interval_ms: int = 1000,
+) -> bytes:
+    """Digest a file at a certified width.
+
+    Opens the path in binary mode, delegates to digest_from_stream, and
+    closes the file on both the success and error paths.
+    """
+    with open(path, "rb") as stream:
+        return digest_from_stream(
+            stream,
+            bits,
+            read_size=read_size,
+            on_progress=on_progress,
+            interval_ms=interval_ms,
+        )
