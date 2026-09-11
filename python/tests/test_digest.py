@@ -19,10 +19,57 @@ from pathlib import Path
 
 import pytest
 from blake3 import blake3
+from hypothesis import given
+from hypothesis import strategies as st
 
 from b3c32 import UncertifiedWidthError, hash_digest
-from b3c32.digest import _CERTIFIED_BITS
+from b3c32.digest import _CERTIFIED_BITS, _IncrementalDigest
 from tests.vectors import _reference_input
+
+
+class TestIncrementalDigest:
+    """Laws of the primitive that need no external oracle.
+
+    Certification against the pinned vector file is TestHashDigest's
+    job once it retargets here; these are the structural claims.
+    """
+
+    def test_update_returns_self(self) -> None:
+        """update chains: h.update(a).update(b) is h."""
+        h = _IncrementalDigest()
+        assert h.update(b"a") is h
+        assert h.update(b"a").update(b"b") is h
+
+    def test_empty_chunk_is_noop(self) -> None:
+        """Empties before, between, and after chunks change nothing."""
+        data = _reference_input(2049)
+        whole = _IncrementalDigest().update(data).digest(120)
+
+        assert len(whole) == 15, "Returning None/empty is a silent failure"
+        h = _IncrementalDigest().update(b"")
+        for start in range(0, len(data), 1023):
+            h.update(data[start : start + 1023]).update(b"")
+        assert h.digest(120) == whole
+
+    @given(st.binary(max_size=4096), st.integers(min_value=1, max_value=1100))
+    def test_partitioning_invariance(self, data: bytes, chunk_size: int) -> None:
+        """Metamorphic law: any partitioning equals the whole feed.
+
+        Oracle is ourselves, so this is a law, not a certification.
+        """
+        whole = _IncrementalDigest().update(data).digest(120)
+        assert len(whole) == 15
+
+        h = _IncrementalDigest()
+        for start in range(0, len(data), chunk_size):
+            h.update(data[start : start + chunk_size])
+        assert h.digest(120) == whole, f"chunk_size={chunk_size} len={len(data)}"
+
+    @pytest.mark.parametrize("bits", [0, 8, 64, 119, 121, 128, 256])
+    def test_uncertified_width_raises(self, bits: int) -> None:
+        """digest raises UncertifiedWidthError off the certified set."""
+        with pytest.raises(UncertifiedWidthError):
+            _IncrementalDigest().digest(bits)
 
 
 class TestHashDigest:
