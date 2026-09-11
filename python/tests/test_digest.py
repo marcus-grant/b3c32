@@ -23,7 +23,7 @@ from hypothesis import strategies as st
 
 from b3c32 import UncertifiedWidthError, hash_digest
 from b3c32.digest import _CERTIFIED_BITS, _IncrementalDigest
-from tests.vectors import _reference_input
+from tests.vectors import _chunked, _reference_input
 
 # Feed patterns are (chunk_size, interleave_empty). Sizes are chosen
 # against blake3's structure, 1024-byte leaves and 64-byte blocks, not
@@ -36,13 +36,6 @@ FEED_PATTERNS = [
     pytest.param(1, False, id="single_byte"),
     pytest.param(1023, True, id="leaf_minus_one_with_empties"),
 ]
-
-
-def _chunked(data: bytes, chunk_size: int | None) -> list[bytes]:
-    """Split data into chunk_size pieces; None means one whole chunk."""
-    if chunk_size is None:
-        return [data]
-    return [data[i : (i + chunk_size)] for i in range(0, len(data), chunk_size)]
 
 
 def _feed(
