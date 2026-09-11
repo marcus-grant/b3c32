@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# scripts/pre-commit
+#
+# Run the full gate before every commit. Runs against the working tree,
+# not the index: a commit is expected to stage the whole gate-verified
+# tree. Bypass for WIP on a branch with --no-verify, never on main.
+
+set -euo pipefail
+
+command -v just >/dev/null || {
+  echo "pre-commit: just is not installed" >&2
+  exit 1
+}
+
+exec just check

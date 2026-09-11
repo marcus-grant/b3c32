@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/init-repo.sh
 #
-# One-time setup after cloning: symlink repo hooks into .git/hooks.
+# One-time setup after cloning: point git at the tracked hooks directory.
 # Run from the repo root.
 
 set -euo pipefail
@@ -11,5 +11,6 @@ set -euo pipefail
   exit 1
 }
 
-ln -sf ../../scripts/commit-msg .git/hooks/commit-msg
-echo "commit-msg hook linked"
+git config core.hooksPath scripts/hooks
+echo "hooks path set to $(git config core.hooksPath)"
+
