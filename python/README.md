@@ -32,6 +32,13 @@ functions `encode_crockford_b32`, `decode_crockford_b32`, and
 `coerce_crockford_b32`, the alphabet as `CROCKFORD32_ALPHABET`, and the
 error types `UncertifiedWidthError` and `CoercionError`.
 
+For input that should not be materialised, `code_from_path`,
+`code_from_stream`, and `code_from_chunks` take a path, a binary file
+object, or any iterable of byte chunks, with optional progress via
+`on_progress` (cumulative bytes) and `interval_ms`. Each has a
+`digest_from_*` counterpart returning raw digest bytes. The digest is
+the same however the input arrives.
+
 ## Consuming
 
 Pin an exact version. The project is pre-1.0 and no compatibility
@@ -56,4 +63,3 @@ Pre-release. Certification hardening is in progress. The full scheme
 definition, the normative conformance contract, and the frozen vectors
 live at the project root:
 <https://github.com/marcus-grant/b3c32>
-

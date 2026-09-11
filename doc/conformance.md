@@ -95,6 +95,25 @@ and a correct one are indistinguishable,
 so assertions must compare bytes past 64,
 which the full-equality class does at the reference output's full width.
 
+A third axis is where update boundaries fall.
+The shipped hasher is incremental:
+it accepts input in chunks of any size, empty chunks included,
+and the digest must depend only on their concatenation.
+So every hasher assertion class runs under a feed matrix
+chosen against the leaf and block sizes:
+whole input, 1023-byte chunks that straddle the leaf boundary,
+exactly 1024, a size coprime to 1024, single bytes,
+and 1023-byte chunks with empties before, between, and after.
+Each must reproduce the pinned hex,
+at the sliced width and at full extended-output width.
+Materialised-bytes hashing is the whole-input special case
+and is certified by delegation, not as a second implementation:
+two wrappers over the same blake3 substrate are not independent oracles,
+only drift to police.
+The digest is also non-consuming:
+a mid-feed cut must not disturb the final digest,
+pinned against the 2049-byte reference case.
+
 The encoder is proven over a bounded domain rather than merely sampled.
 Bit-mechanics are a stateless streaming map, so every input up to a small
 length (covering all residue and window-transition cases) is encoded and
@@ -197,6 +216,9 @@ Consumers pin a git tag and call `verify_conformance` in their own test suites.
 It takes no arguments and raises AssertionError naming the failed claim.
 Its scope is drift detection through the public API at the certified width:
 one curated assertion per contract claim a consumer depends on.
+That includes the chunked route:
+a reference input fed across the 1024-byte leaf boundary
+with empties interleaved must reproduce its frozen code.
 It is not itself a certification.
 Deep certification,
 the reference-file vectors and the exhaustive codec domains,
