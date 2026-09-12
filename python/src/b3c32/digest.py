@@ -20,7 +20,7 @@ from blake3 import blake3
 
 from b3c32.errors import UncertifiedWidthError
 
-_CERTIFIED_BITS = frozenset({120})
+CERTIFIED_BITS = frozenset({120})
 
 
 class _IncrementalDigest:
@@ -61,7 +61,7 @@ class _IncrementalDigest:
         Non-consuming: may be called mid-feed and again after further
         updates, each call reflecting everything fed so far.
         """
-        if bits not in _CERTIFIED_BITS:
+        if bits not in CERTIFIED_BITS:
             raise UncertifiedWidthError(bits)
         return self._hasher.digest(length=bits // 8)
 

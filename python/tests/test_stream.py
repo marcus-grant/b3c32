@@ -26,7 +26,7 @@ from b3c32.stream import (
     digest_from_path,
     digest_from_stream,
 )
-from tests.vectors import _chunked, _reference_input
+from tests.vectors import chunked, reference_input
 
 
 def _clocked_reporter(
@@ -127,8 +127,8 @@ LEAF = 1024  # blake3 leaf (chunk) size, in bytes
 LEAF_MINUS1 = 1023  # Blake3 leaf size minus one, for chunking tests
 DEFAULT_READ = 1 << 20  # digest_from_stream's default read_size
 REFERENCE_SIZE = 2049  # Size of the reference input, in bytes
-DATA = _reference_input(REFERENCE_SIZE)  # Standard test input, covers multiple leaves
-CHUNKS = _chunked(DATA, LEAF_MINUS1)  # Split into chunks for streaming tests
+DATA = reference_input(REFERENCE_SIZE)  # Standard test input, covers multiple leaves
+CHUNKS = chunked(DATA, LEAF_MINUS1)  # Split into chunks for streaming tests
 
 
 class Boom(Exception):

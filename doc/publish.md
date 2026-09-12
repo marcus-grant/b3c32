@@ -51,7 +51,9 @@ number permanently, so the dry run is not optional.
 
 ## Checking a release
 
-The wheel should contain the four package modules and nothing else: no
-tests, no caches, no vector files. Inspect it with `unzip -l` on the
-built artifact under `python/dist/` before trusting a first publish
-after any packaging change.
+The wheel should contain exactly the package modules under
+`python/src/b3c32/` and nothing else:
+no tests, no caches, no vector files.
+No tests, no caches, no vector files.
+Inspect it with `unzip -l` on the built artifact under
+`python/dist/` before trusting a first publish after any packaging change.

@@ -22,8 +22,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from b3c32 import UncertifiedWidthError, hash_digest
-from b3c32.digest import _CERTIFIED_BITS, _IncrementalDigest
-from tests.vectors import _chunked, _reference_input
+from b3c32.digest import CERTIFIED_BITS, _IncrementalDigest
+from tests.vectors import chunked, reference_input
 
 # Feed patterns are (chunk_size, interleave_empty). Sizes are chosen
 # against blake3's structure, 1024-byte leaves and 64-byte blocks, not
@@ -46,7 +46,7 @@ def _feed(
     h = _IncrementalDigest()
     if interleave_empty:
         h.update(b"")
-    for chunk in _chunked(data, chunk_size):
+    for chunk in chunked(data, chunk_size):
         h.update(chunk)
         if interleave_empty:
             h.update(b"")
@@ -68,7 +68,7 @@ class TestIncrementalDigest:
 
     def test_empty_chunk_is_noop(self) -> None:
         """Empties before, between, and after chunks change nothing."""
-        data = _reference_input(2049)
+        data = reference_input(2049)
         whole = _IncrementalDigest().update(data).digest(120)
 
         assert len(whole) == 15, "Returning None/empty is a silent failure"
@@ -134,7 +134,7 @@ class TestIncrementalDigestConformance:
         for case in _load_blake3_cases():
             msg = f"mismatch on input_len={case['input_len']}"
             expect = bytes.fromhex(case["hash"][:30])
-            data = _reference_input(case["input_len"])
+            data = reference_input(case["input_len"])
             assert _feed(data, chunk_size, interleave_empty).digest(120) == expect, msg
 
     @pytest.mark.parametrize("chunk_size,interleave_empty", FEED_PATTERNS)
@@ -153,7 +153,7 @@ class TestIncrementalDigestConformance:
         cases = [c for c in _load_blake3_cases() if c["input_len"] in boundaries]
         assert len(cases) == len(boundaries)
         for case in cases:
-            data = _reference_input(case["input_len"])
+            data = reference_input(case["input_len"])
             digest = _feed(data, chunk_size, interleave_empty).digest(120)
             msg = f"chunk boundary mismatch at input_len={case['input_len']}"
             assert digest == bytes.fromhex(case["hash"][:30]), msg
@@ -173,7 +173,7 @@ class TestIncrementalDigestConformance:
         for case in _load_blake3_cases():
             full = bytes.fromhex(case["hash"])
             assert len(full) > 64, "reference output must cross the XOF block"
-            data = _reference_input(case["input_len"])
+            data = reference_input(case["input_len"])
             fed = _feed(data, chunk_size, interleave_empty)
             actual = fed._hasher.digest(length=len(full))
             msg = f"full output mismatch at input_len={case['input_len']}"
@@ -203,7 +203,7 @@ class TestIncrementalDigestConformance:
         """
         case = next(c for c in _load_blake3_cases() if c["input_len"] == 2049)
         expect = bytes.fromhex(case["hash"][:30])
-        chunks = _chunked(_reference_input(2049), 1023)
+        chunks = chunked(reference_input(2049), 1023)
 
         h = _IncrementalDigest().update(chunks[0])
         h.digest(120)
@@ -224,7 +224,7 @@ class TestHashDigest:
 
     def test_is_whole_input_special_case(self) -> None:
         """Identity with the primitive fed whole, on a reference input."""
-        data = _reference_input(2049)
+        data = reference_input(2049)
         assert hash_digest(data, 120) == _IncrementalDigest().update(data).digest(120)
 
     def test_uncertified_width_raises_through_delegation(self) -> None:
@@ -260,4 +260,4 @@ class TestCertifiedWidthGate:
 
     def test_certified_set_is_exactly_120(self) -> None:
         """The certified set contains 120 and nothing else."""
-        assert _CERTIFIED_BITS == {120}
+        assert CERTIFIED_BITS == {120}

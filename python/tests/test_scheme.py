@@ -26,8 +26,8 @@ from tests.vectors import (
     CONVENIENCE_ENCODED_VECTORS,
     KNOWN_ENCODE_VECTORS,
     REFERENCE_ENCODED_VECTORS,
-    _chunked,
-    _reference_input,
+    chunked,
+    reference_input,
 )
 
 CONVENIENCE_ENCODED_PYTEST = [
@@ -52,7 +52,7 @@ class TestHashB32:
         """Contract 4.9. Reference-input encodings match the frozen set.
         Certified: each derives from the pinned reference hex through certified encoder,
         so it detects error, not just change."""
-        assert hash_b32(_reference_input(input_len), 120) == expect
+        assert hash_b32(reference_input(input_len), 120) == expect
 
     @pytest.mark.parametrize("data,expect", CONVENIENCE_ENCODED_PYTEST)
     def test_convenience_encodings_match_frozen_set(self, data: bytes, expect: str):
@@ -117,17 +117,17 @@ class TestCodeFromSources:
 
     def test_chunks_matches_hash_b32(self) -> None:
         """code_from_chunks over 1023-byte chunks equals hash_b32 whole."""
-        data = _reference_input(2049)
-        assert code_from_chunks(_chunked(data, 1023), 120) == hash_b32(data, 120)
+        data = reference_input(2049)
+        assert code_from_chunks(chunked(data, 1023), 120) == hash_b32(data, 120)
 
     def test_stream_matches_hash_b32(self) -> None:
         """code_from_stream over io.BytesIO equals hash_b32 whole."""
-        data = _reference_input(2049)
+        data = reference_input(2049)
         assert code_from_stream(io.BytesIO(data), 120) == hash_b32(data, 120)
 
     def test_path_matches_hash_b32(self, tmp_path: Path) -> None:
         """code_from_path over a file equals hash_b32 whole."""
-        data = _reference_input(2049)
+        data = reference_input(2049)
         (path := tmp_path / "data.bin").write_bytes(data)
         assert code_from_path(path, 120) == hash_b32(data, 120)
 
@@ -136,6 +136,6 @@ class TestCodeFromSources:
         """Contract composition: every frozen reference code is reproduced
         through the chunked route with interleaved empties."""
         chunks = [b""]
-        for chunk in _chunked(_reference_input(input_len), 1023):
+        for chunk in chunked(reference_input(input_len), 1023):
             chunks += [chunk, b""]
         assert code_from_chunks(chunks, 120) == expect

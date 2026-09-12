@@ -13,6 +13,7 @@ import pytest
 import b3c32
 
 _PUBLIC_INTERFACES = {
+    "CERTIFIED_BITS",
     "CROCKFORD32_ALPHABET",
     "UncertifiedWidthError",
     "CoercionError",
@@ -31,6 +32,7 @@ _PUBLIC_INTERFACES = {
 }
 
 _HOME_MODULES = {
+    "CERTIFIED_BITS": "b3c32.digest",
     "CROCKFORD32_ALPHABET": "b3c32.codec",
     "coerce_crockford_b32": "b3c32.codec",
     "decode_crockford_b32": "b3c32.codec",

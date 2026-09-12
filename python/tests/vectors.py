@@ -84,12 +84,12 @@ CONVENIENCE_ENCODED_VECTORS = [
 ]
 
 
-def _reference_input(input_len: int) -> bytes:
+def reference_input(input_len: int) -> bytes:
     """Reconstruct a reference input: byte i is i mod 251, per vector file rule."""
     return bytes(i % 251 for i in range(input_len))
 
 
-def _chunked(data: bytes, chunk_size: int | None) -> list[bytes]:
+def chunked(data: bytes, chunk_size: int | None) -> list[bytes]:
     """Split data into chunk_size pieces; None means one whole chunk."""
     if chunk_size is None:
         return [data]
