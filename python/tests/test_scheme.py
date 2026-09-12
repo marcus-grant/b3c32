@@ -13,6 +13,7 @@ Date: 2026-09-11
 License: Apache-2.0
 """
 
+import io
 import json
 from pathlib import Path
 
@@ -20,10 +21,12 @@ import pytest
 from blake3 import blake3
 
 from b3c32 import encode_crockford_b32, hash_b32, hash_digest
+from b3c32.scheme import code_from_chunks, code_from_path, code_from_stream
 from tests.vectors import (
     CONVENIENCE_ENCODED_VECTORS,
     KNOWN_ENCODE_VECTORS,
     REFERENCE_ENCODED_VECTORS,
+    _chunked,
     _reference_input,
 )
 
@@ -101,3 +104,38 @@ class TestHashB32:
             ]
             msg = f"frozen file missing or drifted on convenience {data!r}"
             assert hits and hits[0]["digest_encoded"] == expect, msg
+
+
+class TestCodeFromSources:
+    """The streaming compositions: digest layer, then the codec.
+
+    Composition itself is certified by TestHashB32 on the frozen codes;
+    here each entry point gets one wiring test against hash_b32, plus
+    one frozen-code check through the chunked route so the streaming
+    composition is pinned to a published value, not only to ourselves.
+    """
+
+    def test_chunks_matches_hash_b32(self) -> None:
+        """code_from_chunks over 1023-byte chunks equals hash_b32 whole."""
+        data = _reference_input(2049)
+        assert code_from_chunks(_chunked(data, 1023), 120) == hash_b32(data, 120)
+
+    def test_stream_matches_hash_b32(self) -> None:
+        """code_from_stream over io.BytesIO equals hash_b32 whole."""
+        data = _reference_input(2049)
+        assert code_from_stream(io.BytesIO(data), 120) == hash_b32(data, 120)
+
+    def test_path_matches_hash_b32(self, tmp_path: Path) -> None:
+        """code_from_path over a file equals hash_b32 whole."""
+        data = _reference_input(2049)
+        (path := tmp_path / "data.bin").write_bytes(data)
+        assert code_from_path(path, 120) == hash_b32(data, 120)
+
+    @pytest.mark.parametrize("input_len,expect", REFERENCE_ENCODED_VECTORS)
+    def test_chunked_codes_match_frozen_set(self, input_len: int, expect: str):
+        """Contract composition: every frozen reference code is reproduced
+        through the chunked route with interleaved empties."""
+        chunks = [b""]
+        for chunk in _chunked(_reference_input(input_len), 1023):
+            chunks += [chunk, b""]
+        assert code_from_chunks(chunks, 120) == expect

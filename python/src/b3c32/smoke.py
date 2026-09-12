@@ -9,6 +9,7 @@ License: Apache-2.0
 from b3c32 import (
     CoercionError,
     UncertifiedWidthError,
+    code_from_chunks,
     coerce_crockford_b32,
     decode_crockford_b32,
     encode_crockford_b32,
@@ -63,3 +64,11 @@ def verify_conformance() -> None:
         pass
     else:
         raise AssertionError("smoke: UncertifiedWidthError not raised at 160")
+
+    reference = bytes(i % 251 for i in range(2049))
+    chunks: list[bytes] = [b""]
+    for start in range(0, 2049, 1023):
+        chunks += [reference[start : start + 1023], b""]
+    code = code_from_chunks(chunks, 120)
+    msg = f"smoke: chunked route mismatch crossing the 1024-byte leaf, got {code}"
+    assert code == "BX6Q5X0DF9FR5CAWMASE8JRX", msg

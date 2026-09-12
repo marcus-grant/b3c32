@@ -88,3 +88,11 @@ class TestVerifyConformance:
         monkeypatch.setattr("b3c32.smoke.coerce_crockford_b32", fake_coerce)
         with pytest.raises(AssertionError, match="CoercionError not raised"):
             verify_conformance()
+
+    def test_red_on_chunked_route_drift(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A wrong chunked-route code fails the smoke check."""
+        monkeypatch.setattr(
+            "b3c32.smoke.code_from_chunks", lambda chunks, bits: "WRONG"
+        )
+        with pytest.raises(AssertionError, match="chunked route"):
+            verify_conformance()

@@ -7,27 +7,6 @@ ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
 
-## Streaming: whole-file buffering blocks large inputs
-
-`hash_b32` takes materialised bytes,
-so peak memory scales with input size.
-Scout routinely hashes multi-gigabyte files and tar archives near 100GB;
-those cannot be hashed at all.
-normpic records this as blocking its own streaming entry
-and gating remote sourcing entirely.
-Settled design:
-
-- Chunk-consuming core holds hasher state, slicing, encoding,
-  progress throttle and completion guarantee; internal for now
-- Stream-accepting entry point drives a sync read loop over the core
-- Path-accepting entry point opens binary, delegates, closes on both paths
-- Opt-in push progress via `on_progress`, receiving cumulative bytes consumed
-- Total bytes never appears in the signature; only the caller knows one
-- `progress_interval` in seconds, minimum spacing, not exact
-- Completion callback fires unconditionally, once with zero on an empty file
-- Errors propagate; an interrupted read never yields a digest
-- Core stays sync and blocking; `async` is a later driver over the same core
-
 ## CLI: no out-of-band way to produce hashes
 
 Scout needs hashes fed into its SQLite manifests by hand
@@ -152,6 +131,29 @@ Settled design:
 
 - Pin the acceptance with a test naming the documented rationale
 
+## Naming cutover: noun_from_source
+
+New surface uses `noun_from_source`: `digest_from_chunks`,
+`digest_from_stream`, `digest_from_path`, and the `code_from_*`
+counterparts. `hash_digest` and `hash_b32` are the retained legacy
+names, equivalent to `digest_from_bytes` and `code_from_bytes`.
+Cutover is staged on the Rust port: the pyo3 hybrid is where the
+deprecation flags on the legacy names start; completion of the Rust
+port is the cutover that deletes deprecated public names. Until then
+no deprecation warnings are emitted.
+
+## Chores from the streaming work
+
+- Anchor `scripts/generate-conformance-vectors.py` and
+  `scripts/audit-conformance-vectors.sh` on their own location so the
+  `just vectors` and `just audit` recipes drop their path arguments.
+- Generator docstring still says "depo's implementation".
+- Rename `_reference_input` and `_chunked` in `tests/vectors.py` to
+  public names; they are shared across test modules.
+- Comment `REFERENCE_ENCODED_VECTORS` and `CONVENIENCE_ENCODED_VECTORS`
+  in `tests/vectors.py` with their contract clauses.
+- `test_codec.py` may split encode from decode if legibility suffers.
+
 ## CI and publish gating
 
 Nothing mechanically checks a tagged commit. The full gate is manual,
@@ -167,24 +169,6 @@ one place manual discipline is not enough.
   no-CI hazard
 - Audit script in CI needs b3sum pinned in the runner, so it rides
   later or gets its own entry
-
-## `Async`: streaming core has no `async` driver
-
-The streaming entry point drives a sync read loop,
-so an `async` consumer must buffer whole inputs to hash them,
-which defeats the memory bound streaming exists to provide.
-depo hashes Starlette uploads before they are committed to the store
-and never holds a path;
-its ingestion pipeline assumes materialised bytes throughout
-and needs rework before it can consume this.
-Settled design:
-
-- Additive thin driver over the chunk-consuming core from the streaming entry
-- Differs from the sync loop by the await; nothing below the loop forks
-- Digest, slicing, and encoding stay shared, so results cannot diverge
-- Document that the sync reader under a `Starlette` `UploadFile` is the file object,
-  not the `UploadFile`, whose read is a coroutine
-- Open: whether the surface accepts `async` iterators as well as `async` readers
 
 ## Conformance doc sharpening
 
