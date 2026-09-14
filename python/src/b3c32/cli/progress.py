@@ -27,6 +27,7 @@ class Drawn:
     """
 
     frames: int = 0
+    bytes: int = 0
 
 
 def render_bar(done: int, total: int, width: int, elapsed_s: float) -> str:
@@ -71,24 +72,52 @@ def render_status(path: str, total: int, elapsed_s: float) -> str:
     )
 
 
-def draw(done: int, *, total: int, err: TextIO, started: float, drawn: Drawn) -> None:
+def render_count(done: int, elapsed_s: float) -> str:
+    """Render one in-place frame for a source of unknown size.
+
+    Args:
+        done: Bytes hashed so far; must be positive.
+        elapsed_s: Seconds since hashing started.
+
+    Returns:
+        A carriage return, done in MiB, and the average MiB/s so far.
+        No trailing newline, so the next frame overwrites this one.
+    """
+    done_mib = done / MIB
+    return f"\r{done_mib:.1f} MiB {done_mib / elapsed_s:.1f} MiB/s"
+
+
+def draw(
+    done: int, *, total: int | None, err: TextIO, started: float, drawn: Drawn
+) -> None:
     """The on_progress callback sum_command binds with functools.partial.
 
     The library passes only bytes consumed; everything else is bound.
-    Reports at 0 and at total are the library's unconditional start and
-    finish calls, not progress, and produce no output. Any other report
-    writes one bar frame to err and increments drawn.frames. This is the
-    only clock read in the module.
+    The report at 0 is the library's unconditional start call and
+    produces no output. With a total, the report at total is likewise
+    the finish call and is skipped, and the frame is a bar. Without a
+    total the finish call is indistinguishable from progress, so every
+    later report draws a count frame. Either way drawn.bytes records
+    the latest report and drawn.frames counts frames written. This is
+    the only clock read in the module.
 
     Args:
         done: Cumulative bytes consumed, from the library.
-        total: Size of the input in bytes.
+        total: Size of the input in bytes, or None when unknown.
         err: Where frames go; stderr in production, a StringIO in tests.
         started: time.monotonic() reading taken before the hash call.
         drawn: Frame counter shared with sum_command.
     """
-    if done == 0 or done == total:
+    if done == 0:
         return
-    err.write(render_bar(done, total, BAR_WIDTH, time.monotonic() - started))
+    drawn.bytes = done
+    elapsed_s = time.monotonic() - started
+    if total is None:
+        frame = render_count(done, elapsed_s)
+    elif done == total:
+        return
+    else:
+        frame = render_bar(done, total, BAR_WIDTH, elapsed_s)
+    err.write(frame)
     err.flush()
     drawn.frames += 1

@@ -9,7 +9,7 @@ License: Apache-2.0
 import io
 import time
 
-from b3c32.cli.progress import Drawn, draw, render_bar, render_status
+from b3c32.cli.progress import Drawn, draw, render_bar, render_count, render_status
 
 MIB = 1 << 20
 
@@ -39,6 +39,14 @@ class TestRenderStatus:
         assert line == "\r\x1b[Kf 10.0 MiB in 4.0s, 2.5 MiB/s\n"
 
 
+class TestRenderCount:
+    def test_example(self) -> None:
+        """Without a total there is no bar, percent, or estimate; the
+        frame is the running byte count and the average rate, still
+        carriage-return led with no newline."""
+        assert render_count(4 * MIB, 2.0) == "\r4.0 MiB 2.0 MiB/s"
+
+
 class TestDraw:
     def test_skips_start_and_total(self) -> None:
         """Library reports on start & finish unconditionally. Neither is progress;
@@ -60,3 +68,17 @@ class TestDraw:
         assert frame.startswith("\r[") and "MiB" in frame
         assert not frame.endswith("\n")
         assert drawn.frames == 1
+
+    def test_no_total_counts_every_report_but_start(self) -> None:
+        """With no size to compare against, the finish report cannot be
+        told from progress, so every report after the first draws a
+        count frame and records the bytes seen, which is how the stdin
+        branch learns its size at the end."""
+        err, drawn, started = io.StringIO(), Drawn(), time.monotonic()
+        draw(0, total=None, err=err, started=started, drawn=drawn)
+        draw(4, total=None, err=err, started=started, drawn=drawn)
+        draw(10, total=None, err=err, started=started, drawn=drawn)
+        assert err.getvalue().count("\r") == 2
+        assert "[" not in err.getvalue()
+        assert drawn.frames == 2
+        assert drawn.bytes == 10

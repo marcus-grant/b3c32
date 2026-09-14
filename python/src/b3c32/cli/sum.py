@@ -18,7 +18,13 @@ from .progress import Drawn, draw, render_status
 
 
 def _sum_path(path: Path, cfg: Config, interval_ms: int, read_size: int) -> str:
-    """Helper to sum_command for its path branch of the command"""
+    """Hash the file at path and return the code.
+
+    Progress is bound here because only this branch knows a size: draw
+    gets the file's byte count, sys.stderr, the start time, and a fresh
+    Drawn, and a status line follows the hash if any frame was drawn.
+    OSError from stat, open, or read propagates to sum_command.
+    """
     total = path.stat().st_size
     started = time.monotonic()
     drawn = Drawn()
@@ -71,12 +77,16 @@ def sum_command(
         0 on success; 3 when the source cannot be opened or read, after
         writing "b3c32sum: PATH: <strerror>" to stderr.
     """
-    if isinstance(cfg.source, Path):
-        try:
+    label = str(cfg.source) if isinstance(cfg.source, Path) else "-"
+    try:
+        if isinstance(cfg.source, Path):
             code = _sum_path(cfg.source, cfg, interval_ms, read_size)
-        except OSError as e:
-            sys.stderr.write(f"{PROG_NAME}: {cfg.source}: {e.strerror}\n")
-            return 3
-        print(code)
-        return 0
-    return 1
+        else:
+            code = code_from_stream(
+                sys.stdin.buffer, cfg.width_bits, read_size=read_size, on_progress=None
+            )
+    except OSError as e:
+        sys.stderr.write(f"{PROG_NAME}: {label}: {e.strerror}\n")
+        return 3
+    print(code)
+    return 0

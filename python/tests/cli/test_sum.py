@@ -7,13 +7,14 @@ License: Apache-2.0
 """
 
 import errno
+import io
 import os
 from pathlib import Path
 
 import pytest
 
-from b3c32 import code_from_path
-from b3c32.cli.config import Config
+from b3c32 import code_from_chunks, code_from_path
+from b3c32.cli.config import DEFAULT_WIDTH_BITS, Config, Stdin
 from b3c32.cli.sum import sum_command
 
 
@@ -69,3 +70,17 @@ class TestSumCommand:
         out, err = capsys.readouterr()
         assert out == ""
         assert err == f"b3c32sum: {path}: {os.strerror(errno.ENOENT)}\n"
+
+
+class TestSumStdin:
+    def test_prints_code_alone(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A Stdin source reads sys.stdin.buffer to exhaustion and prints
+        the code exactly as a path would; no bar, since stdin has no
+        size, and nothing on stderr."""
+        monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"hello")))
+        assert sum_command(Config(source=Stdin())) == 0
+        out, err = capsys.readouterr()
+        assert out == code_from_chunks([b"hello"], DEFAULT_WIDTH_BITS) + "\n"
+        assert err == ""
