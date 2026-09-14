@@ -8,6 +8,7 @@ License: Apache-2.0
 
 import argparse
 import dataclasses
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -37,6 +38,7 @@ class Config:
     display: Display = "code"
     progress: bool = True
     width_bits: int = DEFAULT_WIDTH_BITS
+    total: int | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,10 +49,14 @@ class Option:
     flags: tuple[str, ...]
     field: str
     help: str
+    parse: Callable[[str], object] | None = None
 
 
 OPTIONS: tuple[Option, ...] = (
     Option(("--no-progress",), "progress", "suppress the stderr progress bar"),
+    Option(
+        ("-T", "--total"), "total", "expected size in bytes, draws a bar on stdin", int
+    ),
 )
 
 
@@ -61,16 +67,33 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=PROG_NAME)
     p.add_argument("path", nargs="?", default="-")
     for opt in OPTIONS:
-        action = "store_false" if defaults[opt.field] else "store_true"
-        p.add_argument(*opt.flags, dest=opt.field, action=action, help=opt.help)
+        if opt.parse is not None:
+            p.add_argument(
+                *opt.flags,
+                dest=opt.field,
+                type=opt.parse,
+                default=defaults[opt.field],
+                help=opt.help,
+            )
+        else:
+            action = "store_false" if defaults[opt.field] else "store_true"
+            p.add_argument(*opt.flags, dest=opt.field, action=action, help=opt.help)
     return p
 
 
 def validate(namespace: argparse.Namespace) -> None:
-    """Every cross-field rule lives here. Currently: path "-" is stdin,
-    raise UsageError("stdin not implemented")."""
-    if namespace.path == "-":
-        raise UsageError("stdin not implemented")
+    """Reject command lines whose fields conflict, before Config exists.
+
+    Every cross-field rule lives here so each new operation or option
+    adds its rule in one place with one test. Current rules:
+    --total with a path, since a file's size comes from stat and a
+    supplied total could only disagree with it.
+
+    Raises:
+        UsageError: naming the conflict; main prints it and returns 2.
+    """
+    if namespace.total is not None and namespace.path != "-":
+        raise UsageError("total is only for stdin")
 
 
 def parse(argv: list[str] | None) -> Config:

@@ -15,6 +15,7 @@ from b3c32.cli.config import (
     DEFAULT_WIDTH_BITS,
     OPTIONS,
     Config,
+    Stdin,
     UsageError,
     build_parser,
     parse,
@@ -47,15 +48,28 @@ class TestBuildParser:
         """--no-progress stores False on namespace.progress."""
         assert build_parser().parse_args(["--no-progress"]).progress is False
 
+    def test_total_parses_as_int(self) -> None:
+        """-T/--total takes a byte count; the row's converter turns the
+        string into an int so Config never sees text."""
+        assert build_parser().parse_args(["-T", "5"]).total == 5
+
 
 class TestParse:
     def test_path_builds_config(self, tmp_path: Path) -> None:
         """parse([str(p)]) == Config(source=p); every other field default."""
         assert parse([str(path := tmp_path / "f")]) == Config(source=path)
 
-    def test_stdin_raises_usage_error(self) -> None:
-        """parse(["-"]) and parse([]) both raise UsageError; no Config formed."""
+    def test_stdin_builds_config(self):
+        """stdin or piped inputs lead to correct config build"""
+        assert parse(["-"]) == parse([]) == Config(source=Stdin())
+
+    def test_total_with_path_raises_usage_error(self, tmp_path: Path) -> None:
+        """A file's size comes from stat; a supplied total would only
+        disagree with it, so the pair is rejected before Config exists."""
         with pytest.raises(UsageError):
-            parse(["-"])
-        with pytest.raises(UsageError):
-            parse([])
+            parse([str(tmp_path / "f"), "-T", "5"])
+
+    def test_total_with_stdin_builds_config(self) -> None:
+        """Stdin has no size of its own, so a supplied total is the one
+        place the option is meaningful."""
+        assert parse(["-T", "5"]) == Config(source=Stdin(), total=5)
