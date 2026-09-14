@@ -6,6 +6,7 @@ Date: 2026-09-14
 License: Apache-2.0
 """
 
+import io
 from importlib.metadata import entry_points
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 from b3c32 import code_from_path
 from b3c32.cli.b3c32sum import main
 from b3c32.cli.config import Config, UsageError
+from tests.vectors import REFERENCE_ENCODED_VECTORS, reference_input
 
 
 class TestMain:
@@ -60,3 +62,21 @@ def test_console_script_loads_main() -> None:
     this main, so the wheel and the tested function cannot diverge."""
     (script,) = entry_points(group="console_scripts", name="b3c32sum")
     assert script.load() is main
+
+
+@pytest.mark.e2e
+def test_reference_2049_by_path_and_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The whole command at its defaults, once with the reference file as
+    a path and once piped, both printing the frozen 2049 code. This is
+    wiring against a regression pin, not certification: the code was
+    frozen by the suite, and here it only proves the CLI reaches it."""
+    data = reference_input(2049)
+    expected = dict(REFERENCE_ENCODED_VECTORS)[2049] + "\n"
+    (path := tmp_path / "ref").write_bytes(data)
+    assert main([str(path)]) == 0
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(data)))
+    assert main([]) == 0
+    out, _ = capsys.readouterr()
+    assert out == expected * 2

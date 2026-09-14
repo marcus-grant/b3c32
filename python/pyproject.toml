@@ -33,3 +33,6 @@ packages = ["src/b3c32"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+
+[tool.pytest.ini_options]
+markers = ["e2e: whole-command run against a reference input"]
