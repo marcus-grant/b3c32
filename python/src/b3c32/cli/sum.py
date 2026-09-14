@@ -10,6 +10,7 @@ import functools
 import sys
 import time
 from pathlib import Path
+from typing import BinaryIO
 
 from b3c32 import code_from_stream
 
@@ -17,40 +18,84 @@ from .config import PROG_NAME, Config
 from .progress import Drawn, draw, render_status
 
 
+def _sum_stream(
+    stream: BinaryIO,
+    cfg: Config,
+    *,
+    total: int | None,
+    label: str,
+    interval_ms: int,
+    read_size: int,
+) -> str:
+    """Hash one open binary stream with progress on stderr and return the code.
+
+    The branch that opened the stream supplies what only it knows: the
+    size, or None when unknown, and the label the status line names the
+    source by. When cfg.progress is set, draw is bound over that size,
+    sys.stderr, the start time, and a fresh Drawn; a status line follows
+    the hash only if a frame was drawn, sized by the bytes draw recorded.
+    Does not close the stream. OSError from a read propagates.
+
+    Args:
+        stream: Open for reading bytes; a file or sys.stdin.buffer.
+        cfg: Supplies width_bits and progress.
+        total: Size in bytes, or None to draw counts instead of a bar.
+        label: How the status line names the source.
+        interval_ms: Minimum spacing between progress reports.
+        read_size: Bytes per stream read.
+    """
+    started, drawn = time.monotonic(), Drawn()
+    on_progress = (
+        functools.partial(
+            draw, total=total, err=sys.stderr, started=started, drawn=drawn
+        )
+        if cfg.progress
+        else None
+    )
+    code = code_from_stream(
+        stream,
+        cfg.width_bits,
+        read_size=read_size,
+        on_progress=on_progress,
+        interval_ms=interval_ms,
+    )
+    if drawn.frames:
+        sys.stderr.write(render_status(label, drawn.bytes, time.monotonic() - started))
+    return code
+
+
 def _sum_path(path: Path, cfg: Config, interval_ms: int, read_size: int) -> str:
     """Hash the file at path and return the code.
 
-    Progress is bound here because only this branch knows a size: draw
-    gets the file's byte count, sys.stderr, the start time, and a fresh
-    Drawn, and a status line follows the hash if any frame was drawn.
-    OSError from stat, open, or read propagates to sum_command.
+    The size comes from stat, so frames are bars and the finish report
+    is recognised. OSError from stat, open, or read propagates.
     """
     total = path.stat().st_size
-    started = time.monotonic()
-    drawn = Drawn()
-    on_progress = None
-    if cfg.progress:
-        on_progress = functools.partial(
-            draw,
-            total=path.stat().st_size,
-            err=sys.stderr,
-            started=time.monotonic(),
-            drawn=drawn,
-        )
-    else:
-        on_progress = None
     with path.open("rb") as f:
-        code = code_from_stream(
+        return _sum_stream(
             f,
-            cfg.width_bits,
-            read_size=read_size,
-            on_progress=on_progress,
+            cfg,
+            total=total,
+            label=str(path),
             interval_ms=interval_ms,
+            read_size=read_size,
         )
-    if drawn.frames:
-        status = render_status(str(path), total, time.monotonic() - started)
-        sys.stderr.write(status)
-    return code
+
+
+def _sum_stdin(cfg: Config, interval_ms: int, read_size: int) -> str:
+    """Hash sys.stdin.buffer to exhaustion and return the code.
+
+    The size is cfg.total, None unless --total was given: bars with it,
+    running counts without. OSError from a read propagates.
+    """
+    return _sum_stream(
+        sys.stdin.buffer,
+        cfg,
+        total=cfg.total,
+        label="-",
+        interval_ms=interval_ms,
+        read_size=read_size,
+    )
 
 
 def sum_command(
@@ -82,9 +127,7 @@ def sum_command(
         if isinstance(cfg.source, Path):
             code = _sum_path(cfg.source, cfg, interval_ms, read_size)
         else:
-            code = code_from_stream(
-                sys.stdin.buffer, cfg.width_bits, read_size=read_size, on_progress=None
-            )
+            code = _sum_stdin(cfg, interval_ms, read_size)
     except OSError as e:
         sys.stderr.write(f"{PROG_NAME}: {label}: {e.strerror}\n")
         return 3

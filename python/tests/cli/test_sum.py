@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from b3c32 import code_from_chunks, code_from_path
-from b3c32.cli.config import DEFAULT_WIDTH_BITS, Config, Stdin
+from b3c32 import code_from_path
+from b3c32.cli.config import Config, Stdin
 from b3c32.cli.sum import sum_command
 
 
@@ -73,14 +73,37 @@ class TestSumCommand:
 
 
 class TestSumStdin:
+    """Tests for Stdin checksum branch of input for sum_command"""
+
     def test_prints_code_alone(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """A Stdin source reads sys.stdin.buffer to exhaustion and prints
-        the code exactly as a path would; no bar, since stdin has no
-        size, and nothing on stderr."""
+        the code exactly as a path would; with progress off, nothing on
+        stderr."""
         monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"hello")))
-        assert sum_command(Config(source=Stdin())) == 0
-        out, err = capsys.readouterr()
-        assert out == code_from_chunks([b"hello"], DEFAULT_WIDTH_BITS) + "\n"
-        assert err == ""
+        assert sum_command(Config(source=Stdin(), progress=False)) == 0
+
+    def test_counts_then_status_without_total(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No total means count frames: reports 2, 4, 5 each draw, then
+        the status line uses the bytes seen, labelled "-"."""
+        monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"hello")))
+        assert sum_command(Config(source=Stdin()), interval_ms=0, read_size=2) == 0
+        _, err = capsys.readouterr()
+        assert err.count("\r") == 4
+        assert "\r[" not in err
+        assert "\x1b[K- " in err
+        assert err.endswith("MiB/s\n")
+
+    def test_bar_then_status_with_total(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A supplied total makes stdin draw exactly as a file does: two
+        bar frames for reports 2 and 4, none for 5, then the status."""
+        monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b"hello")))
+        cfg = Config(source=Stdin(), total=5)
+        assert sum_command(cfg, interval_ms=0, read_size=2) == 0
+        _, err = capsys.readouterr()
+        assert err.count("\r[") == 2 and err.count("\x1b[K") == 1
