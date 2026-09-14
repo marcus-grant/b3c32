@@ -17,6 +17,9 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/marcus-grant/b3c32"
 
+[project.scripts]
+b3c32sum = "b3c32.cli.b3c32sum:main"
+
 [dependency-groups]
 dev = ["pytest", "hypothesis", "ruff", "pyright"]
 
