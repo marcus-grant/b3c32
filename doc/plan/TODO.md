@@ -7,42 +7,6 @@ ordered by severity.
 Each entry records the finding and its settled design where discussion resolved one.
 Resolved entries are deleted, not marked resolved.
 
-## CLI: no out-of-band way to produce hashes
-
-Scout needs hashes fed into its SQLite manifests by hand
-during workflow exploration,
-and its hash column needs independent sanity checking.
-Depends on the path and stream entry points.
-Settled design:
-
-- `b3c32sum`:
-  - console script,
-  - argparse only,
-  - single package
-- `Coreutils` output shape:
-  - `-n/--no-name` prints the hash alone
-  - `-w/--width-bits` and `-W/--width-symbols`,
-    - mutually exclusive,
-    - default 120 bits;
-      - refuses uncertified widths
-  - `stdin` on no arguments or `-`,
-    - printed as `-` in the filename column
-  - `-T/--total-bytes` supplies a stdin progress total; error with a path
-  - `-c` takes one expected hash; normalized both sides, strict length
-- Progress automatic on `TTY` `stderr`,
-  - `--progress` and `--no-progress` override
-- Exit codes from a declared map:
-  - 0 success,
-  - 1 mismatch,
-  - 2 usage error,
-  - 3 unreadable input
-- Deferred:
-  - Sums-file check mode.
-    - When it lands,
-      - `-c` disambiguates by filesystem first,
-      - hash shape second
-  - Prefix matching in check mode
-
 ## Async: streaming core has no async driver
 
 The streaming entry point drives a sync read loop,
@@ -96,6 +60,31 @@ Settled design:
   derived cases marked as such,
   the five existing staying as asserted hand-held literals
 - Document the vector file schema as a mini-spec in doc
+
+## CLI: b3c32sum beyond the minimum
+
+Default output is the code alone as shipped;
+the coreutils `CODE  NAME` shape is not.
+Which is the default, and the flag direction that follows,
+is decided when named output lands.
+
+- Coreutils output shape:
+  - `CODE  NAME` lines, stdin printed as `-`
+  - `-w/--width-bits` and `-W/--width-symbols`,
+    - mutually exclusive,
+    - default 120 bits;
+      - refuses uncertified widths
+  - `-c` takes one expected hash; normalized both sides, strict length
+- Progress automatic on `TTY` `stderr`,
+  - `--progress` override
+- Exit code 1 for mismatch, once `-c` exists
+- Sub-MiB sizes print as `0.0/0.0 MiB`; pick a unit ladder
+- Deferred:
+  - Sums-file check mode.
+    - When it lands,
+      - `-c` disambiguates by filesystem first,
+      - hash shape second
+  - Prefix matching in check mode
 
 ## Fix 6: Generator never verifies the reference file pin
 

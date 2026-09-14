@@ -1,7 +1,7 @@
 # python/pyproject.toml
 [project]
 name = "b3c32"
-version = "0.0.3"
+version = "0.0.4"
 description = "Compact, hand-writable, prefix-matchable BLAKE3 XOF hashes in Crockford Base32"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,6 +17,9 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/marcus-grant/b3c32"
 
+[project.scripts]
+b3c32sum = "b3c32.cli.b3c32sum:main"
+
 [dependency-groups]
 dev = ["pytest", "hypothesis", "ruff", "pyright"]
 
@@ -30,3 +33,6 @@ packages = ["src/b3c32"]
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+
+[tool.pytest.ini_options]
+markers = ["e2e: whole-command run against a reference input"]
