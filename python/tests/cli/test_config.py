@@ -49,7 +49,7 @@ class TestBuildParser:
         assert build_parser().parse_args(["--no-progress"]).progress is False
 
     def test_total_parses_as_int(self) -> None:
-        """-T/--total takes a byte count; the row's converter turns the
+        """-T/--total-bytes takes a byte count; the row's converter turns the
         string into an int so Config never sees text."""
         assert build_parser().parse_args(["-T", "5"]).total == 5
 

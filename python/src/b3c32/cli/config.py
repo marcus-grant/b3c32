@@ -55,7 +55,7 @@ class Option:
 OPTIONS: tuple[Option, ...] = (
     Option(("--no-progress",), "progress", "suppress the stderr progress bar"),
     Option(
-        ("-T", "--total"), "total", "expected size in bytes, draws a bar on stdin", int
+        ("-T", "--total-bytes"), "total", "expected size in bytes, draws a bar on stdin", int
     ),
 )
 
@@ -86,7 +86,7 @@ def validate(namespace: argparse.Namespace) -> None:
 
     Every cross-field rule lives here so each new operation or option
     adds its rule in one place with one test. Current rules:
-    --total with a path, since a file's size comes from stat and a
+    --total-bytes with a path, since a file's size comes from stat and a
     supplied total could only disagree with it.
 
     Raises:

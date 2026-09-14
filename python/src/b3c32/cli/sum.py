@@ -85,7 +85,7 @@ def _sum_path(path: Path, cfg: Config, interval_ms: int, read_size: int) -> str:
 def _sum_stdin(cfg: Config, interval_ms: int, read_size: int) -> str:
     """Hash sys.stdin.buffer to exhaustion and return the code.
 
-    The size is cfg.total, None unless --total was given: bars with it,
+    The size is cfg.total, None unless --total-bytes was given: bars with it,
     running counts without. OSError from a read propagates.
     """
     return _sum_stream(
