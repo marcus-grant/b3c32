@@ -9,7 +9,7 @@ License: Apache-2.0
 import io
 import time
 
-from b3c32.cli.progress import Drawn, _draw, render_bar, render_status
+from b3c32.cli.progress import Drawn, draw, render_bar, render_status
 
 MIB = 1 << 20
 
@@ -45,17 +45,17 @@ class TestDraw:
         a job under one interval gets exactly those two should gen no stderr &
         no frame count."""
         err, drawn, started = io.StringIO(), Drawn(), time.monotonic()
-        _draw(0, total=10, err=err, started=started, drawn=drawn)
-        _draw(10, total=10, err=err, started=started, drawn=drawn)
+        draw(0, total=10, err=err, started=started, drawn=drawn)
+        draw(10, total=10, err=err, started=started, drawn=drawn)
         assert err.getvalue() == ""
         assert drawn.frames == 0
 
     def test_writes_frame_and_counts(self) -> None:
         """Reports between start & finish write one frame to stream.
         Then bumps frame count that sum_command reads to decide if status line is owed.
-        The clock is read inside _draw, only static parts of the frame are checked."""
+        The clock is read inside draw, only static parts of the frame are checked."""
         err, drawn, started = io.StringIO(), Drawn(), time.monotonic()
-        _draw(4, total=10, err=err, started=started, drawn=drawn)
+        draw(4, total=10, err=err, started=started, drawn=drawn)
         frame = err.getvalue()
         assert frame.startswith("\r[") and "MiB" in frame
         assert not frame.endswith("\n")

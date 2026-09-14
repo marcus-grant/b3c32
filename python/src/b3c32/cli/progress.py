@@ -1,7 +1,7 @@
 # python/src/b3c32/cli/progress.py
 """Progress bar and status line for b3c32sum, stderr only.
 
-Rendering is pure; _draw is the on_progress callback and the one place
+Rendering is pure; draw is the on_progress callback and the one place
 that reads the clock and writes.
 
 Author: Marcus Grant
@@ -19,9 +19,9 @@ MIB = 1 << 20
 
 @dataclass
 class Drawn:
-    """Frame counter shared between _draw and sum_command.
+    """Frame counter shared between draw and sum_command.
 
-    _draw increments it per bar frame written; sum_command reads it
+    draw increments it per bar frame written; sum_command reads it
     after hashing to decide whether a status line is owed. Mutable on
     purpose: the callback has no return channel.
     """
@@ -71,7 +71,7 @@ def render_status(path: str, total: int, elapsed_s: float) -> str:
     )
 
 
-def _draw(done: int, *, total: int, err: TextIO, started: float, drawn: Drawn) -> None:
+def draw(done: int, *, total: int, err: TextIO, started: float, drawn: Drawn) -> None:
     """The on_progress callback sum_command binds with functools.partial.
 
     The library passes only bytes consumed; everything else is bound.
